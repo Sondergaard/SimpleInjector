@@ -1,24 +1,5 @@
-﻿#region Copyright Simple Injector Contributors
-/* The Simple Injector is an easy-to-use Inversion of Control library for .NET
- * 
- * Copyright (c) 2013-2016 Simple Injector Contributors
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and 
- * associated documentation files (the "Software"), to deal in the Software without restriction, including 
- * without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell 
- * copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the 
- * following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in all copies or substantial 
- * portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT 
- * LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO 
- * EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER 
- * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE 
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
-*/
-#endregion
+﻿// Copyright (c) Simple Injector Contributors. All rights reserved.
+// Licensed under the MIT License. See LICENSE file in the project root for license information.
 
 namespace SimpleInjector
 {
@@ -27,7 +8,6 @@ namespace SimpleInjector
     using System.Collections.Generic;
     using System.Linq;
     using System.Linq.Expressions;
-    using System.Reflection;
     using System.Threading;
     using SimpleInjector.Diagnostics;
     using SimpleInjector.Internals;
@@ -40,17 +20,17 @@ namespace SimpleInjector
         // Flag to signal that the container's configuration is currently being verified.
         private readonly ThreadLocal<bool> isVerifying = new ThreadLocal<bool>();
 
-        private readonly ThreadLocal<Scope> resolveScope = new ThreadLocal<Scope>();
+        private readonly ThreadLocal<Scope?> resolveScope = new ThreadLocal<Scope?>();
 
         private bool usingCurrentThreadResolveScope;
 
         // Flag to signal that the container's configuration has been verified (at least once).
         internal bool SuccesfullyVerified { get; private set; }
 
-        internal Scope VerificationScope { get; private set; }
+        internal Scope? VerificationScope { get; private set; }
 
         // Allows to resolve directly from a scope instead of relying on an ambient context.
-        internal Scope CurrentThreadResolveScope
+        internal Scope? CurrentThreadResolveScope
         {
             get
             {
@@ -71,7 +51,7 @@ namespace SimpleInjector
         }
 
         /// <summary>
-        /// Verifies and diagnoses this <b>Container</b> instance. This method will call all registered 
+        /// Verifies and diagnoses this <b>Container</b> instance. This method will call all registered
         /// delegates, iterate registered collections and throws an exception if there was an error.
         /// </summary>
         /// <exception cref="InvalidOperationException">Thrown when the registration of instances was
@@ -82,7 +62,7 @@ namespace SimpleInjector
         }
 
         /// <summary>
-        /// Verifies the <b>Container</b>. This method will call all registered delegates, 
+        /// Verifies the <b>Container</b>. This method will call all registered delegates,
         /// iterate registered collections and throws an exception if there was an error.
         /// </summary>
         /// <param name="option">Specifies how the container should verify its configuration.</param>
@@ -107,22 +87,17 @@ namespace SimpleInjector
             }
         }
 
-#if !NET40
         // NOTE: IsVerifying is thread-specific. We return null is the container is verifying on a
         // different thread.
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-#endif
-        internal Scope GetVerificationOrResolveScopeForCurrentThread() =>
+        internal Scope? GetVerificationOrResolveScopeForCurrentThread() =>
             this.VerificationScope != null && this.IsVerifying
                 ? this.VerificationScope
                 : this.usingCurrentThreadResolveScope
                     ? this.resolveScope.Value
                     : null;
 
-        internal void UseCurrentThreadResolveScope()
-        {
-            this.usingCurrentThreadResolveScope = true;
-        }
+        internal void UseCurrentThreadResolveScope() => this.usingCurrentThreadResolveScope = true;
 
         private void VerifyInternal(bool suppressLifestyleMismatchVerification)
         {
@@ -130,10 +105,22 @@ namespace SimpleInjector
             // the first thread could dispose the verification scope, while the other thread is still using it.
             lock (this.isVerifying)
             {
-                this.LockContainer();
-                bool original = this.Options.SuppressLifestyleMismatchVerification;
+                // Flag verifying before locking the container, because LockContainer otherwise triggers
+                // verification again causing a stack overflow.
                 this.IsVerifying = true;
-                this.VerificationScope = new ContainerVerificationScope(this);
+
+                this.LockContainer();
+
+                bool original = this.Options.SuppressLifestyleMismatchVerification;
+
+                var scope = this.Options.DefaultScopedLifestyle?.GetCurrentScope(this);
+
+                // If there is a current active scope, prefer using that scope for verification. This prevents
+                // this method from having to manage a verification scope, which means calling Dispose() which
+                // is problematic when there are IAsyncDisposable registrations. Downside of using the active
+                // scope is that those components could be kept alive much longer (depending on when the
+                // active scope is disposed of).
+                this.VerificationScope = scope ?? new ContainerVerificationScope(this);
 
                 try
                 {
@@ -146,16 +133,32 @@ namespace SimpleInjector
 
                     this.Verifying();
                     this.VerifyThatAllExpressionsCanBeBuilt();
-                    this.VerifyThatAllRootObjectsCanBeCreated();
+                    this.VerifyThatAllRootObjectsCanBeCreated(this.VerificationScope);
                     this.SuccesfullyVerified = true;
                 }
                 finally
                 {
                     this.Options.SuppressLifestyleMismatchVerification = original;
-                    this.IsVerifying = false;
+                    
                     var scopeToDispose = this.VerificationScope;
                     this.VerificationScope = null;
-                    scopeToDispose.Dispose();
+
+                    try
+                    {
+                        // Only when Verify created the scope itself, should it dispose it. This will prevent
+                        // us from having to call Dispose, which will throw when there are IAsyncDisposable
+                        // registrations.
+                        if (scopeToDispose is ContainerVerificationScope)
+                        {
+                            scopeToDispose.Dispose();
+                        }
+                    }
+                    finally
+                    {
+                        // Must be reset after calling Dispose(), because Scope.Dispose() ignores
+                        // IAsyncDisposables during verification.
+                        this.IsVerifying = false;
+                    }
                 }
             }
         }
@@ -166,10 +169,10 @@ namespace SimpleInjector
 
             InstanceProducer[] producersToVerify;
 
-            // The process of building expressions can trigger the creation/registration of new instance 
-            // producers. Those new producers need to be checked as well. That's why we have a loop here. But 
-            // since a user could accidentally trigger the creation of new registrations during verify, we 
-            // must set a sensible limit to the number of iterations, to prevent the process from never 
+            // The process of building expressions can trigger the creation/registration of new instance
+            // producers. Those new producers need to be checked as well. That's why we have a loop here. But
+            // since a user could accidentally trigger the creation of new registrations during verify, we
+            // must set a sensible limit to the number of iterations, to prevent the process from never
             // stopping.
             do
             {
@@ -188,7 +191,7 @@ namespace SimpleInjector
             while (maximumNumberOfIterations > 0 && producersToVerify.Any());
         }
 
-        private void VerifyThatAllRootObjectsCanBeCreated()
+        private void VerifyThatAllRootObjectsCanBeCreated(Scope verificationScope)
         {
             var rootProducers = this.GetRootRegistrations(includeInvalidContainerRegisteredTypes: true);
 
@@ -199,7 +202,7 @@ namespace SimpleInjector
                 where !producer.InstanceSuccessfullyCreated || !producer.VerifiersAreSuccessfullyCalled
                 select producer;
 
-            this.VerifyInstanceCreation(producersToVerify.ToArray());
+            this.VerifyInstanceCreation(producersToVerify.ToArray(), verificationScope);
         }
 
         private IEnumerable<InstanceProducer> GetProducersThatNeedExplicitVerification()
@@ -226,13 +229,13 @@ namespace SimpleInjector
         {
             var constant = expression as ConstantExpression;
 
-            if (constant != null && constant.Value is IContainerControlledCollection collection)
+            if (constant?.Value is IContainerControlledCollection collection)
             {
                 collection.VerifyCreatingProducers();
             }
         }
 
-        private void VerifyInstanceCreation(InstanceProducer[] producersToVerify)
+        private void VerifyInstanceCreation(InstanceProducer[] producersToVerify, Scope verificationScope)
         {
             foreach (var producer in producersToVerify)
             {
@@ -245,7 +248,7 @@ namespace SimpleInjector
 
                 if (!producer.VerifiersAreSuccessfullyCalled)
                 {
-                    producer.DoExtraVerfication(this.VerificationScope);
+                    producer.DoExtraVerfication(verificationScope);
                 }
             }
         }
@@ -272,7 +275,7 @@ namespace SimpleInjector
                 select result)
                 .ToArray();
 
-            if (errors.Any())
+            if (errors.Length > 0)
             {
                 throw new DiagnosticVerificationException(errors);
             }

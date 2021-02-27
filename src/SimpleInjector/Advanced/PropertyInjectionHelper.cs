@@ -1,24 +1,5 @@
-﻿#region Copyright Simple Injector Contributors
-/* The Simple Injector is an easy-to-use Inversion of Control library for .NET
- * 
- * Copyright (c) 2013 Simple Injector Contributors
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and 
- * associated documentation files (the "Software"), to deal in the Software without restriction, including 
- * without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell 
- * copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the 
- * following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in all copies or substantial 
- * portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT 
- * LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO 
- * EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER 
- * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE 
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
-*/
-#endregion
+﻿// Copyright (c) Simple Injector Contributors. All rights reserved.
+// Licensed under the MIT License. See LICENSE file in the project root for license information.
 
 namespace SimpleInjector.Advanced
 {
@@ -29,14 +10,13 @@ namespace SimpleInjector.Advanced
     using System.Linq.Expressions;
     using System.Reflection;
 
-    internal sealed partial class PropertyInjectionHelper
+    internal sealed class PropertyInjectionHelper
     {
         private const int MaximumNumberOfFuncArguments = 16;
         private const int MaximumNumberOfPropertiesPerDelegate = MaximumNumberOfFuncArguments - 1;
 
         private static readonly ReadOnlyCollection<Type> FuncTypes = new ReadOnlyCollection<Type>(new Type[]
             {
-                null,
                 typeof(Func<>),
                 typeof(Func<,>),
                 typeof(Func<,,>),
@@ -66,7 +46,9 @@ namespace SimpleInjector.Advanced
         }
 
         internal static PropertyInjectionData BuildPropertyInjectionExpression(
-            Container container, Type implementationType, PropertyInfo[] properties,
+            Container container,
+            Type implementationType,
+            PropertyInfo[] properties,
             Expression expressionToWrap)
         {
             var helper = new PropertyInjectionHelper(container, implementationType);
@@ -124,7 +106,7 @@ namespace SimpleInjector.Advanced
                 Expression.Block(this.implementationType, propertyInjectionExpressions),
                 parameters);
 
-            return this.CompilePropertyInjectorLambda(lambda);
+            return this.container.Options.ExpressionCompilationBehavior.Compile(lambda);
         }
 
         private List<Expression> BuildPropertyInjectionExpressions(ParameterExpression targetParameter,
@@ -147,9 +129,9 @@ namespace SimpleInjector.Advanced
 
         private static void VerifyProperty(PropertyInfo property)
         {
-            MethodInfo setMethod = property.GetSetMethod(nonPublic: true);
+            MethodInfo? setMethod = property.GetSetMethod(nonPublic: true);
 
-            if (setMethod == null)
+            if (setMethod is null)
             {
                 throw new ActivationException(StringResources.PropertyHasNoSetter(property));
             }
@@ -192,7 +174,8 @@ namespace SimpleInjector.Advanced
 
             return new PropertyInjectionData(
                 expression: Expression.Invoke(Expression.Constant(propertyInjectionDelegate), arguments),
-                producers: producers.Concat(data.Producers));
+                producers: producers.Concat(data.Producers),
+                properties: properties.Concat(data.Properties));
         }
 
         private InstanceProducer[] GetPropertyInstanceProducers(PropertyInfo[] properties)
@@ -220,31 +203,25 @@ namespace SimpleInjector.Advanced
 
             int numberOfInputArguments = genericTypeArguments.Count;
 
-            Type openGenericFuncType = FuncTypes[numberOfInputArguments];
+            Type openGenericFuncType = FuncTypes[numberOfInputArguments - 1];
 
             return openGenericFuncType.MakeGenericType(genericTypeArguments.ToArray());
         }
-
-        private Delegate CompilePropertyInjectorLambda(LambdaExpression expression)
-        {
-            Delegate compiledDelegate = null;
-
-            this.TryCompileLambdaInDynamicAssembly(expression, ref compiledDelegate);
-
-            return compiledDelegate ?? expression.Compile();
-        }
-
-        partial void TryCompileLambdaInDynamicAssembly(LambdaExpression expression, ref Delegate compiledDelegate);
 
         internal struct PropertyInjectionData
         {
             public readonly Expression Expression;
             public readonly IEnumerable<InstanceProducer> Producers;
+            public readonly IEnumerable<PropertyInfo> Properties;
 
-            public PropertyInjectionData(Expression expression, IEnumerable<InstanceProducer> producers = null)
+            public PropertyInjectionData(
+                Expression expression,
+                IEnumerable<InstanceProducer>? producers = null,
+                IEnumerable<PropertyInfo>? properties = null)
             {
                 this.Expression = expression;
                 this.Producers = producers ?? Enumerable.Empty<InstanceProducer>();
+                this.Properties = properties ?? Enumerable.Empty<PropertyInfo>();
             }
         }
     }

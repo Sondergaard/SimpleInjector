@@ -74,7 +74,7 @@
             // Arrange
             DisposableUserRepository instanceToDispose;
 
-            var container = new Container();
+            var container = ContainerFactory.New();
 
             var lifestyle = new DisposableTransientLifestyle(new ThreadScopedLifestyle());
 
@@ -196,9 +196,9 @@
             catch (Exception ex)
             {
                 Assert.IsTrue(
-                    ex.InnerException.Message.Contains(
+                    ex.Message.Contains(
                         "Please make sure DisposableTransientLifestyle.EnableForContainer(Container) is called"),
-                    "Actual: " + ex.InnerException.Message);
+                    "Actual: " + ex.Message);
             }
         }
 

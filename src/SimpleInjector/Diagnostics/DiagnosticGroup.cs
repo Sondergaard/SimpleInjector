@@ -1,24 +1,5 @@
-﻿#region Copyright Simple Injector Contributors
-/* The Simple Injector is an easy-to-use Inversion of Control library for .NET
- * 
- * Copyright (c) 2013 Simple Injector Contributors
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and 
- * associated documentation files (the "Software"), to deal in the Software without restriction, including 
- * without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell 
- * copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the 
- * following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in all copies or substantial 
- * portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT 
- * LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO 
- * EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER 
- * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE 
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
-*/
-#endregion
+﻿// Copyright (c) Simple Injector Contributors. All rights reserved.
+// Licensed under the MIT License. See LICENSE file in the project root for license information.
 
 namespace SimpleInjector.Diagnostics
 {
@@ -31,11 +12,16 @@ namespace SimpleInjector.Diagnostics
     /// <summary>
     /// A hierarchical group of <see cref="DiagnosticResult"/>.
     /// </summary>
-    [DebuggerDisplay(nameof(DiagnosticGroup) + " (Name: {Name, nq})")]
+    [DebuggerDisplay(nameof(DiagnosticGroup) + " (Name: {" + nameof(Name) + ", nq})")]
     public class DiagnosticGroup
     {
-        internal DiagnosticGroup(DiagnosticType diagnosticType, Type groupType, string name, string description,
-            IEnumerable<DiagnosticGroup> children, IEnumerable<DiagnosticResult> results)
+        internal DiagnosticGroup(
+            DiagnosticType diagnosticType,
+            Type groupType,
+            string name,
+            string description,
+            IEnumerable<DiagnosticGroup> children,
+            IEnumerable<DiagnosticResult> results)
         {
             this.DiagnosticType = diagnosticType;
             this.GroupType = groupType;
@@ -49,8 +35,8 @@ namespace SimpleInjector.Diagnostics
         }
 
         /// <summary>
-        /// Gets the base <see cref="DiagnosticType"/> that describes the service types of its 
-        /// <see cref="Results"/>. The value often be either <see cref="System.Object"/> (in case this is a
+        /// Gets the base <see cref="DiagnosticType"/> that describes the service types of its
+        /// <see cref="Results"/>. The value often be either <see cref="object"/> (in case this is a
         /// root group) or a partial generic type to allow hierarchical grouping of a large number of related
         /// generic types.
         /// </summary>
@@ -72,10 +58,10 @@ namespace SimpleInjector.Diagnostics
         /// <value>The <see cref="DiagnosticType"/>.</value>
         public DiagnosticType DiagnosticType { get; }
 
-        /// <summary>Gets the parent <see cref="DiagnosticGroup"/> or null (Nothing in VB) when this is the
+        /// <summary>Gets the parent <see cref="DiagnosticGroup"/> or null when this is the
         /// root group.</summary>
         /// <value>The <see cref="DiagnosticGroup"/>.</value>
-        public DiagnosticGroup Parent { get; private set; }
+        public DiagnosticGroup? Parent { get; private set; }
 
         /// <summary>Gets the collection of child <see cref="DiagnosticGroup"/>s.</summary>
         /// <value>A collection of <see cref="DiagnosticGroup"/> elements.</value>

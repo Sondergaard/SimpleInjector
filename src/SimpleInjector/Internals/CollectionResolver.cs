@@ -1,37 +1,18 @@
-﻿#region Copyright Simple Injector Contributors
-/* The Simple Injector is an easy-to-use Inversion of Control library for .NET
- * 
- * Copyright (c) 2014-2015 Simple Injector Contributors
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and 
- * associated documentation files (the "Software"), to deal in the Software without restriction, including 
- * without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell 
- * copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the 
- * following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in all copies or substantial 
- * portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT 
- * LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO 
- * EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER 
- * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE 
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
-*/
-#endregion
+﻿// Copyright (c) Simple Injector Contributors. All rights reserved.
+// Licensed under the MIT License. See LICENSE file in the project root for license information.
 
 namespace SimpleInjector.Internals
 {
     using System;
     using System.Collections.Generic;
     using System.Linq;
-    using System.Reflection;
     using SimpleInjector;
     using SimpleInjector.Decorators;
 
     internal abstract class CollectionResolver
     {
         private readonly List<RegistrationGroup> registrationGroups = new List<RegistrationGroup>();
+
         private readonly Dictionary<Type, InstanceProducer> producerCache =
             new Dictionary<Type, InstanceProducer>();
 
@@ -51,12 +32,12 @@ namespace SimpleInjector.Internals
 
         protected Container Container { get; }
 
-        internal abstract void AddControlledRegistrations(Type serviceType, 
-            ContainerControlledItem[] registrations, bool append);
+        internal abstract void AddControlledRegistrations(
+            Type serviceType, ContainerControlledItem[] items, bool append);
 
         internal abstract void RegisterUncontrolledCollection(Type serviceType, InstanceProducer producer);
 
-        internal InstanceProducer TryGetInstanceProducer(Type elementType) => 
+        internal InstanceProducer? TryGetInstanceProducer(Type elementType) =>
             this.ServiceType == elementType || this.ServiceType.IsGenericTypeDefinitionOf(elementType)
                 ? this.GetInstanceProducerFromCache(elementType)
                 : null;
@@ -88,13 +69,13 @@ namespace SimpleInjector.Internals
                 foreach (Type closedServiceType in this.GetAllKnownClosedServiceTypes())
                 {
                     // When registering a generic collection, the container keeps track of all open and closed
-                    // elements in the resolver. This resolver allows unregistered type resolution and this 
-                    // allows all closed versions of the collection to be resolved. But if we only used 
-                    // unregistered type resolution, this could cause these registrations to be hidden from 
-                    // the verification mechanism in case the collections are root types in the application. 
-                    // This could cause the container to verify, while still failing at runtime when resolving 
+                    // elements in the resolver. This resolver allows unregistered type resolution and this
+                    // allows all closed versions of the collection to be resolved. But if we only used
+                    // unregistered type resolution, this could cause these registrations to be hidden from
+                    // the verification mechanism in case the collections are root types in the application.
+                    // This could cause the container to verify, while still failing at runtime when resolving
                     // a collection. So by explicitly resolving the known closed-generic versions here, we
-                    // ensure that all non-generic registrations (and because of that, most open-generic 
+                    // ensure that all non-generic registrations (and because of that, most open-generic
                     // registrations as well) will be validated.
                     this.Container.GetRegistration(typeof(IEnumerable<>).MakeGenericType(closedServiceType));
                 }
@@ -124,9 +105,7 @@ namespace SimpleInjector.Internals
         {
             lock (this.producerCache)
             {
-                InstanceProducer producer;
-
-                if (!this.producerCache.TryGetValue(closedServiceType, out producer))
+                if (!this.producerCache.TryGetValue(closedServiceType, out InstanceProducer producer))
                 {
                     this.producerCache[closedServiceType] =
                         producer = this.BuildCollectionProducer(closedServiceType);
@@ -136,10 +115,8 @@ namespace SimpleInjector.Internals
             }
         }
 
-        private void RemoveRegistrationsToOverride(Type serviceType)
-        {
+        private void RemoveRegistrationsToOverride(Type serviceType) =>
             this.registrationGroups.RemoveAll(group => group.ServiceType == serviceType || group.Appended);
-        }
 
         private void CheckForOverlappingRegistrations(Type serviceType)
         {
@@ -159,7 +136,7 @@ namespace SimpleInjector.Internals
             }
         }
 
-        private IEnumerable<RegistrationGroup> GetOverlappingGroupsFor(Type serviceType) => 
+        private IEnumerable<RegistrationGroup> GetOverlappingGroupsFor(Type serviceType) =>
             from registrationGroup in this.RegistrationGroups
             where !registrationGroup.Appended
             where registrationGroup.ServiceType == serviceType
@@ -169,29 +146,32 @@ namespace SimpleInjector.Internals
 
         protected sealed class RegistrationGroup
         {
-            internal Type ServiceType { get; private set; }
+            private RegistrationGroup(Type serviceType, bool appended)
+            {
+                this.ServiceType = serviceType;
+                this.Appended = appended;
+            }
 
-            internal IEnumerable<ContainerControlledItem> ControlledItems { get; private set; }
+            internal Type ServiceType { get; }
 
-            internal InstanceProducer UncontrolledProducer { get; private set; }
+            internal IEnumerable<ContainerControlledItem>? ControlledItems { get; private set; }
 
-            internal bool Appended { get; private set; }
+            internal InstanceProducer? UncontrolledProducer { get; private set; }
 
-            internal static RegistrationGroup CreateForUncontrolledProducer(Type serviceType,
-                InstanceProducer producer) => 
-                new RegistrationGroup
+            internal bool Appended { get; }
+
+            internal static RegistrationGroup CreateForUncontrolledProducer(
+                Type serviceType, InstanceProducer producer) =>
+                new RegistrationGroup(serviceType, appended: false)
                 {
-                    ServiceType = serviceType,
                     UncontrolledProducer = producer
                 };
 
-            internal static RegistrationGroup CreateForControlledItems(Type serviceType,
-                ContainerControlledItem[] registrations, bool appended) => 
-                new RegistrationGroup
+            internal static RegistrationGroup CreateForControlledItems(
+                Type serviceType, ContainerControlledItem[] items, bool appended) =>
+                new RegistrationGroup(serviceType, appended)
                 {
-                    ServiceType = serviceType,
-                    ControlledItems = registrations,
-                    Appended = appended
+                    ControlledItems = items,
                 };
         }
     }

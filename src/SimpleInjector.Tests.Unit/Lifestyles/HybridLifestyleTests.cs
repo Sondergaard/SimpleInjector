@@ -26,8 +26,8 @@
 
             // Assert
             Assert.AreEqual(@"
-                IIF(Invoke(value(System.Func`1[System.Boolean])), 
-                    Convert(new SqlUserRepository()), 
+                IIF(Invoke(value(System.Func`1[System.Boolean])),
+                    Convert(new SqlUserRepository()),
                     Convert(value(SimpleInjector.Tests.Unit.SqlUserRepository)))".TrimInside(),
                 expression);
         }
@@ -151,9 +151,8 @@
         public void CreateHybrid_TwoScopedLifestyles_ResolvesFromBothLifestyles()
         {
             // Arrange
-            var scope = new Scope();
-
             var container = new Container();
+            var scope = new Scope(container);
 
             container.Options.DefaultScopedLifestyle = Lifestyle.CreateHybrid(
                 defaultLifestyle: new ThreadScopedLifestyle(),
@@ -310,8 +309,8 @@
                 "to the whole expression.");
 
             Assert.AreEqual(@"
-                IIF(Invoke(value(System.Func`1[System.Boolean])), 
-                    Convert(new SqlUserRepository()), 
+                IIF(Invoke(value(System.Func`1[System.Boolean])),
+                    Convert(new SqlUserRepository()),
                     Convert(new SqlUserRepository()))".TrimInside(),
                 expression.ToString());
         }
@@ -678,13 +677,14 @@
                 };
             }
 
-            protected internal override Registration CreateRegistrationCore<TConcrete>(Container container)
+            protected internal override Registration CreateRegistrationCore(
+                Type concreteType, Container container)
             {
-                return this.realLifestyle.CreateRegistration<TConcrete>(container);
+                return this.realLifestyle.CreateRegistrationCore(concreteType, container);
             }
 
-            protected internal override Registration CreateRegistrationCore<TService>(Func<TService> instanceCreator,
-                Container container)
+            protected internal override Registration CreateRegistrationCore<TService>(
+                Func<TService> instanceCreator, Container container)
             {
                 return this.realLifestyle.CreateRegistration(instanceCreator, container);
             }

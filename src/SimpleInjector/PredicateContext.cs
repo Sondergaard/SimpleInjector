@@ -1,24 +1,5 @@
-﻿#region Copyright Simple Injector Contributors
-/* The Simple Injector is an easy-to-use Inversion of Control library for .NET
- * 
- * Copyright (c) 2013-2015 Simple Injector Contributors
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and 
- * associated documentation files (the "Software"), to deal in the Software without restriction, including 
- * without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell 
- * copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the 
- * following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in all copies or substantial 
- * portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT 
- * LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO 
- * EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER 
- * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE 
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
-*/
-#endregion
+﻿// Copyright (c) Simple Injector Contributors. All rights reserved.
+// Licensed under the MIT License. See LICENSE file in the project root for license information.
 
 namespace SimpleInjector
 {
@@ -26,46 +7,63 @@ namespace SimpleInjector
     using System.Diagnostics;
     using System.Diagnostics.CodeAnalysis;
     using System.Globalization;
+    using SimpleInjector.Advanced;
+    using SimpleInjector.Internals;
 
     /// <summary>
     /// An instance of this type will be supplied to the <see cref="Predicate{T}"/>
-    /// delegate that is that is supplied to the 
-    /// <see cref="Container.RegisterConditional(System.Type, System.Type, Lifestyle, Predicate{PredicateContext})">RegisterConditional</see>
-    /// overload that takes this delegate. This type contains information about the open generic service that 
-    /// is about to be created and it allows the user to examine the given instance to decide whether this 
+    /// delegate that is that is supplied to the
+    /// <see cref="Container.RegisterConditional(Type, Type, Lifestyle, Predicate{PredicateContext})">RegisterConditional</see>
+    /// overload that takes this delegate. This type contains information about the service that
+    /// is about to be created and it allows the user to examine the given instance to decide whether this
     /// implementation should be created or not.
     /// </summary>
     /// <remarks>
-    /// Please see the 
-    /// <see cref="Container.RegisterConditional(System.Type, System.Type, Lifestyle, Predicate{PredicateContext})">Register</see>
+    /// Please see the
+    /// <see cref="Container.RegisterConditional(Type, Type, Lifestyle, Predicate{PredicateContext})">Register</see>
     /// method for more information.
     /// </remarks>
     [DebuggerDisplay(nameof(PredicateContext) + " ({" + nameof(DebuggerDisplay) + ", nq})")]
-    public sealed class PredicateContext
+    public sealed class PredicateContext : ApiObject
     {
-        private readonly Func<Type> implementationTypeProvider;
-        private Type implementationType;
+        private readonly InjectionConsumerInfo consumer;
+        private readonly LazyEx<Type> implementationType;
 
         internal PredicateContext(InstanceProducer producer, InjectionConsumerInfo consumer, bool handled)
             : this(producer.ServiceType, producer.Registration.ImplementationType, consumer, handled)
         {
         }
 
-        internal PredicateContext(Type serviceType, Type implementationType, InjectionConsumerInfo consumer,
-            bool handled)
+        internal PredicateContext(
+            Type serviceType, Type implementationType, InjectionConsumerInfo consumer, bool handled)
         {
+            Requires.IsNotNull(serviceType, nameof(serviceType));
+            Requires.IsNotNull(implementationType, nameof(implementationType));
+            Requires.IsNotNull(consumer, nameof(consumer));
+
             this.ServiceType = serviceType;
-            this.implementationType = implementationType;
-            this.Consumer = consumer;
+            this.implementationType = new LazyEx<Type>(implementationType);
+            this.consumer = consumer;
             this.Handled = handled;
         }
 
-        internal PredicateContext(Type serviceType, Func<Type> implementationTypeProvider,
-            InjectionConsumerInfo consumer, bool handled)
+        internal PredicateContext(
+            Type serviceType,
+            Func<Type?> implementationTypeProvider,
+            InjectionConsumerInfo consumer,
+            bool handled)
         {
+            Requires.IsNotNull(serviceType, nameof(serviceType));
+            Requires.IsNotNull(implementationTypeProvider, nameof(implementationTypeProvider));
+            Requires.IsNotNull(consumer, nameof(consumer));
+
             this.ServiceType = serviceType;
-            this.implementationTypeProvider = implementationTypeProvider;
-            this.Consumer = consumer;
+
+            // HACK: LazyEx does not support null (as a simplification and memory optimization). This is why
+            // the dummy type is returned when the provider returns null.
+            this.implementationType =
+                new LazyEx<Type>(() => implementationTypeProvider() ?? typeof(NullMarkerDummy));
+            this.consumer = consumer;
             this.Handled = handled;
         }
 
@@ -73,18 +71,17 @@ namespace SimpleInjector
         /// <value>The closed generic service type.</value>
         public Type ServiceType { get; }
 
-        /// <summary>Gets the closed generic implementation type that will be created by the container.</summary>
+        /// <summary>
+        /// Gets the closed generic implementation type that will be created by the container.
+        /// </summary>
         /// <value>The implementation type.</value>
-        public Type ImplementationType
+        public Type? ImplementationType
         {
             get
             {
-                if (this.implementationType == null)
-                {
-                    this.implementationType = this.implementationTypeProvider();
-                }
+                Type type = this.implementationType.Value;
 
-                return this.implementationType;
+                return type == typeof(NullMarkerDummy) ? null : type;
             }
         }
 
@@ -94,20 +91,52 @@ namespace SimpleInjector
         public bool Handled { get; }
 
         /// <summary>
-        /// Gets the contextual information of the consuming component that directly depends on the resolved
-        /// service. This property will return null in case the service is resolved directly from the container.
+        /// Gets the contextual information of the consuming component that directly depends on the registered
+        /// service. This property will never return null, but instead throw an exception when the service is
+        /// requested directly from the container.
         /// </summary>
-        /// <value>The <see cref="InjectionConsumerInfo"/> or null.</value>
-        public InjectionConsumerInfo Consumer { get; }
+        /// <value>The <see cref="InjectionConsumerInfo"/>.</value>
+        /// <exception cref="InvalidOperationException">Thrown when the service described by this instance
+        /// is requested directly from the container, opposed to being injected into a consumer.</exception>
+        public InjectionConsumerInfo Consumer
+        {
+            get
+            {
+                if (!this.HasConsumer)
+                {
+                    throw new InvalidOperationException(
+                        StringResources.CallingPredicateContextConsumerOnDirectResolveIsNotSupported(this));
+                }
+
+                return this.consumer;
+            }
+        }
+
+        /// <summary>
+        /// Gets a value indicating whether the resolved service is injected into a consumer or is requested
+        /// directly from the container.
+        /// </summary>
+        /// <value>True when the service is injected into a consumer; false when it is requested directly
+        /// from the container</value>
+        public bool HasConsumer => this.consumer != InjectionConsumerInfo.Root;
 
         [SuppressMessage("Microsoft.Performance", "CA1811:AvoidUncalledPrivateCode",
             Justification = "This method is called by the debugger.")]
         [DebuggerBrowsable(DebuggerBrowsableState.Never)]
-        internal string DebuggerDisplay => string.Format(CultureInfo.InvariantCulture,
+        internal string DebuggerDisplay => string.Format(
+            CultureInfo.InvariantCulture,
             "{0}: {1}, {2}: {3}, {4}: {5}, {6}: {7}",
-            nameof(this.ServiceType), this.ServiceType.ToFriendlyName(),
-            nameof(this.ImplementationType), this.ImplementationType.ToFriendlyName(),
-            nameof(this.Handled), this.Handled,
-            nameof(this.Consumer), this.Consumer);
+            nameof(this.ServiceType),
+            this.ServiceType.ToFriendlyName(),
+            nameof(this.ImplementationType),
+            this.ImplementationType?.ToFriendlyName(),
+            nameof(this.Handled),
+            this.Handled,
+            nameof(this.Consumer),
+            this.Consumer);
+
+        private sealed class NullMarkerDummy
+        {
+        }
     }
 }

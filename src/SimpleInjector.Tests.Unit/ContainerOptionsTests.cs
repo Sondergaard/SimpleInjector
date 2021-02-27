@@ -317,7 +317,7 @@
 
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<NotSupportedException>(
-                "making of conditional registrations is not supported when AllowOverridingRegistrations is set",
+                "making of new conditional registrations for an already registered service type is not supported",
                 action);
         }
 
@@ -442,7 +442,7 @@
             // Arrange
             var expectedBehavior = new AlternativeConstructorResolutionBehavior();
 
-            var container = new Container();
+            var container = ContainerFactory.New();
 
             // Request a concrete instance that can be created by the container, even without any registrations.
             container.GetInstance<ClassWithContainerAsDependency>();
@@ -936,6 +936,38 @@
             // Assert
             Assert.AreSame(Lifestyle.Singleton, lifestyle);
         }
+        
+        [TestMethod]
+        public void ResolveUnregisteredConcreteTypes_ByDefault_True()
+        {
+            // Arrange
+            var expectedValue = true;
+
+            var container = ContainerFactory.New();
+
+            // Act
+            var actualValue = container.Options.ResolveUnregisteredConcreteTypes;
+
+            // Assert
+            Assert.AreEqual(expectedValue, actualValue);
+        }
+
+        [TestMethod]
+        public void ResolveUnregisteredConcreteTypes_ChangedAfterContainerIsLocked_ThrowsAnException()
+        {
+            // Arrange
+            var container = new Container();
+
+            container.GetInstance<Container>();
+
+            // Act
+            Action action = () => container.Options.ResolveUnregisteredConcreteTypes = false;
+
+            // Assert
+            AssertThat.ThrowsWithExceptionMessageContains<InvalidOperationException>(
+                "The container can't be changed after the first call",
+                action);
+        }
 
         private static PropertyInfo GetProperty<T>(Expression<Func<T, object>> propertySelector)
         {
@@ -963,17 +995,21 @@
 
         private sealed class AlternativeConstructorResolutionBehavior : IConstructorResolutionBehavior
         {
-            public ConstructorInfo GetConstructor(Type implementationType) => implementationType.GetConstructors()[0];
+            public ConstructorInfo TryGetConstructor(Type implementationType, out string errorMessage)
+            {
+                errorMessage = null;
+                return implementationType.GetConstructors()[0];
+            }
         }
 
         private sealed class AlternativeDependencyInjectionBehavior : IDependencyInjectionBehavior
         {
-            public InstanceProducer GetInstanceProducer(InjectionConsumerInfo consumer, bool throwOnFailure)
+            public InstanceProducer GetInstanceProducer(InjectionConsumerInfo dependency, bool @throw)
             {
                 throw new NotImplementedException();
             }
 
-            public void Verify(InjectionConsumerInfo consumer)
+            public bool VerifyDependency(InjectionConsumerInfo dependency, out string errorMessage)
             {
                 throw new NotImplementedException();
             }

@@ -37,7 +37,7 @@
             registration.GetInstance();
 
             // Assert
-            Assert.IsTrue(container.IsLocked());
+            Assert.IsTrue(container.IsLocked);
         }
 
         [TestMethod]
@@ -52,7 +52,7 @@
             registration.BuildExpression();
 
             // Assert
-            Assert.IsTrue(container.IsLocked());
+            Assert.IsTrue(container.IsLocked);
         }
 
         [TestMethod]
@@ -110,10 +110,75 @@
         {
             // Arrange
             string expectedObjectGraph =
+@"PluginDecorator( // Transient
+    PluginDecoratorWithDependencyOfType<FakeTimeProvider>( // Transient
+        FakeTimeProvider(), // Transient
+        PluginDecorator<int>( // Transient
+            PluginWithDependencyOfType<RealTimeProvider>( // Transient
+                RealTimeProvider())))) // Transient";
+
+            var container = ContainerFactory.New();
+
+            container.Register<IPlugin, PluginWithDependencyOfType<RealTimeProvider>>();
+            container.RegisterDecorator(typeof(IPlugin), typeof(PluginDecorator<int>));
+            container.RegisterDecorator(typeof(IPlugin),
+                typeof(PluginDecoratorWithDependencyOfType<FakeTimeProvider>));
+            container.RegisterDecorator(typeof(IPlugin), typeof(PluginDecorator));
+
+            container.Verify();
+
+            var pluginProducer = container.GetRegistration(typeof(IPlugin));
+
+            // Act
+            string actualObjectGraph = pluginProducer.VisualizeObjectGraph();
+
+            // Assert
+            Assert.AreEqual(expectedObjectGraph, actualObjectGraph);
+        }
+
+        [TestMethod]
+        public void VisualizeObjectGraph_WithLifetimeInformation_BuildsTheExpectedGraph()
+        {
+            // Arrange
+            string expectedObjectGraph =
+@"PluginDecorator( // Transient
+    PluginDecoratorWithDependencyOfType<FakeTimeProvider>( // Transient
+        FakeTimeProvider(), // Transient
+        PluginDecorator<int>( // Transient
+            PluginWithDependencyOfType<RealTimeProvider>( // Transient
+                RealTimeProvider())))) // Transient";
+
+            var container = ContainerFactory.New();
+
+            container.Register<IPlugin, PluginWithDependencyOfType<RealTimeProvider>>();
+            container.RegisterDecorator(typeof(IPlugin), typeof(PluginDecorator<int>));
+            container.RegisterDecorator(typeof(IPlugin),
+                typeof(PluginDecoratorWithDependencyOfType<FakeTimeProvider>));
+            container.RegisterDecorator(typeof(IPlugin), typeof(PluginDecorator));
+
+            container.Verify();
+
+            var pluginProducer = container.GetRegistration(typeof(IPlugin));
+
+            // Act
+            string actualObjectGraph = pluginProducer.VisualizeObjectGraph(new VisualizationOptions
+            {
+                IncludeLifestyleInformation = true,
+            });
+
+            // Assert
+            Assert.AreEqual(expectedObjectGraph, actualObjectGraph);
+        }
+
+        [TestMethod]
+        public void VisualizeObjectGraph_WithoutLifetimeInformation_BuildsTheExpectedGraph()
+        {
+            // Arrange
+            string expectedObjectGraph =
 @"PluginDecorator(
     PluginDecoratorWithDependencyOfType<FakeTimeProvider>(
         FakeTimeProvider(),
-        PluginDecorator<Int32>(
+        PluginDecorator<int>(
             PluginWithDependencyOfType<RealTimeProvider>(
                 RealTimeProvider()))))";
 
@@ -130,7 +195,45 @@
             var pluginProducer = container.GetRegistration(typeof(IPlugin));
 
             // Act
-            string actualObjectGraph = pluginProducer.VisualizeObjectGraph();
+            string actualObjectGraph = pluginProducer.VisualizeObjectGraph(new VisualizationOptions
+            {
+                IncludeLifestyleInformation = false,
+            });
+
+            // Assert
+            Assert.AreEqual(expectedObjectGraph, actualObjectGraph);
+        }
+
+        [TestMethod]
+        public void VisualizeObjectGraph_UseFullyQualifiedTypeNames_BuildsTheExpectedGraph()
+        {
+            // Arrange
+            string expectedObjectGraph =
+@"SimpleInjector.Tests.Unit.PluginDecorator(
+    SimpleInjector.Tests.Unit.PluginDecoratorWithDependencyOfType<SimpleInjector.Tests.Unit.FakeTimeProvider>(
+        SimpleInjector.Tests.Unit.FakeTimeProvider(),
+        SimpleInjector.Tests.Unit.PluginDecorator<System.Int32>(
+            SimpleInjector.Tests.Unit.PluginWithDependencyOfType<SimpleInjector.Tests.Unit.RealTimeProvider>(
+                SimpleInjector.Tests.Unit.RealTimeProvider()))))";
+
+            var container = ContainerFactory.New();
+
+            container.Register<IPlugin, PluginWithDependencyOfType<RealTimeProvider>>();
+            container.RegisterDecorator(typeof(IPlugin), typeof(PluginDecorator<int>));
+            container.RegisterDecorator(typeof(IPlugin),
+                typeof(PluginDecoratorWithDependencyOfType<FakeTimeProvider>));
+            container.RegisterDecorator(typeof(IPlugin), typeof(PluginDecorator));
+
+            container.Verify();
+
+            var pluginProducer = container.GetRegistration(typeof(IPlugin));
+
+            // Act
+            string actualObjectGraph = pluginProducer.VisualizeObjectGraph(new VisualizationOptions
+            {
+                IncludeLifestyleInformation = false,
+                UseFullyQualifiedTypeNames = true,
+            });
 
             // Assert
             Assert.AreEqual(expectedObjectGraph, actualObjectGraph);
@@ -160,10 +263,12 @@
         public void VisualizeObjectGraph_DelayedCyclicReference_VisualizesTheExpectedObjectGraph()
         {
             // Arrange
-            string expectedGraph = @"InstanceProducerTests.NodeFactory(
-    IEnumerable<InstanceProducerTests.INode>(
-        InstanceProducerTests.NodeFactory(
-            IEnumerable<InstanceProducerTests.INode>(/* cyclic dependency graph detected */))))";
+            string expectedGraph =
+@"InstanceProducerTests.NodeFactory( // Transient
+    IEnumerable<InstanceProducerTests.INode>( // Singleton
+        InstanceProducerTests.NodeOne( // Transient
+            InstanceProducerTests.NodeFactory( // Transient
+                IEnumerable<InstanceProducerTests.INode>(/* cyclic dependency graph detected */))))) // Singleton";
 
             var container = new Container();
 
@@ -189,13 +294,13 @@
         {
             // Arrange
             string expectedObjectGraph =
-@"PluginWithDependencies<PluginWithDependencyOfType<PluginWithDependencyOfType<RealTimeProvider>>, ServiceDependingOn<PluginWithDependencyOfType<RealTimeProvider>>>(
-    PluginWithDependencyOfType<PluginWithDependencyOfType<RealTimeProvider>>(
-        PluginWithDependencyOfType<RealTimeProvider>(
-            RealTimeProvider())),
-    ServiceDependingOn<PluginWithDependencyOfType<RealTimeProvider>>(
-        PluginWithDependencyOfType<RealTimeProvider>(
-            RealTimeProvider())))";
+@"PluginWithDependencies<PluginWithDependencyOfType<PluginWithDependencyOfType<RealTimeProvider>>, ServiceDependingOn<PluginWithDependencyOfType<RealTimeProvider>>>( // Transient
+    PluginWithDependencyOfType<PluginWithDependencyOfType<RealTimeProvider>>( // Transient
+        PluginWithDependencyOfType<RealTimeProvider>( // Transient
+            RealTimeProvider())), // Transient
+    ServiceDependingOn<PluginWithDependencyOfType<RealTimeProvider>>( // Transient
+        PluginWithDependencyOfType<RealTimeProvider>( // Transient
+            RealTimeProvider()))) // Transient";
 
             var container = ContainerFactory.New();
 
@@ -206,10 +311,49 @@
             container.Verify();
 
             // Act
-            string actualObjectGraph = pluginProducer.VisualizeObjectGraph();
+            string actualObjectGraph = pluginProducer.VisualizeObjectGraph(new VisualizationOptions
+            {
+                IncludeLifestyleInformation = true,
+            });
 
             // Assert
             Assert.AreEqual(expectedObjectGraph, actualObjectGraph);
+        }
+
+        // This code sample is a copy of the example in the XML comments of InstanceProducer.ImplementationType.
+        [TestMethod]
+        public void InstanceProducerWithDecoratorApplied_ChangesRegistration_AfterTypeIsResolvedForTheFirstTime()
+        {
+            var container = new Container();
+
+            container.Register<ILogger, ConsoleLogger>();
+            container.RegisterDecorator<ILogger, LoggerDecorator>();
+
+            var producer = container.GetRegistration(typeof(ILogger));
+
+            Assert.AreEqual(typeof(ConsoleLogger), producer.ImplementationType);
+            Assert.AreEqual(typeof(ConsoleLogger), producer.Registration.ImplementationType, "Before GetInstance");
+            Assert.AreEqual(typeof(LoggerDecorator), producer.GetInstance().GetType());
+            Assert.AreEqual(typeof(LoggerDecorator), producer.Registration.ImplementationType, "After GetInstance");
+        }
+
+        // #229
+        [TestMethod]
+        public void GetInstance_ForSingletonValueType_CanBeResolved()
+        {
+            // Arrange
+            int expectedValue = 4;
+
+            var container = new Container();
+
+            var registration = Lifestyle.Singleton.CreateRegistration(typeof(int), expectedValue, container);
+            var producer = new InstanceProducer<int>(registration);
+
+            // Act
+            int actualValue = producer.GetInstance();
+
+            // Assert
+            Assert.AreEqual(expectedValue, actualValue);
         }
 
         public class OneAndTwo : IOne, ITwo

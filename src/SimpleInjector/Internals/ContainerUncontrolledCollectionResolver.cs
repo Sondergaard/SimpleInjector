@@ -1,24 +1,5 @@
-﻿#region Copyright Simple Injector Contributors
-/* The Simple Injector is an easy-to-use Inversion of Control library for .NET
- * 
- * Copyright (c) 2015 Simple Injector Contributors
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and 
- * associated documentation files (the "Software"), to deal in the Software without restriction, including 
- * without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell 
- * copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the 
- * following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in all copies or substantial 
- * portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT 
- * LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO 
- * EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER 
- * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE 
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
-*/
-#endregion
+﻿// Copyright (c) Simple Injector Contributors. All rights reserved.
+// Licensed under the MIT License. See LICENSE file in the project root for license information.
 
 namespace SimpleInjector.Internals
 {
@@ -26,7 +7,6 @@ namespace SimpleInjector.Internals
     using System.Collections;
     using System.Collections.Generic;
     using System.Linq;
-    using System.Reflection;
     using SimpleInjector;
     using SimpleInjector.Lifestyles;
 
@@ -39,8 +19,8 @@ namespace SimpleInjector.Internals
         {
         }
 
-        internal override void AddControlledRegistrations(Type serviceType,
-            ContainerControlledItem[] registrations, bool append)
+        internal override void AddControlledRegistrations(
+            Type serviceType, ContainerControlledItem[] registrations, bool append)
         {
             if (append)
             {
@@ -51,15 +31,13 @@ namespace SimpleInjector.Internals
             else
             {
                 throw new NotSupportedException(
-                    StringResources.MixingRegistrationsWithControlledAndUncontrolledIsNotSupported(serviceType,
-                        controlled: true));
+                    StringResources.MixingRegistrationsWithControlledAndUncontrolledIsNotSupported(
+                        serviceType, controlled: true));
             }
         }
 
-        internal override void RegisterUncontrolledCollection(Type serviceType, InstanceProducer producer)
-        {
+        internal override void RegisterUncontrolledCollection(Type serviceType, InstanceProducer producer) =>
             this.AddRegistrationGroup(RegistrationGroup.CreateForUncontrolledProducer(serviceType, producer));
-        }
 
         protected override InstanceProducer BuildCollectionProducer(Type closedServiceType)
         {
@@ -70,24 +48,17 @@ namespace SimpleInjector.Internals
                 : this.CombineProducersToOne(closedServiceType, producers);
         }
 
-        protected override Type[] GetAllKnownClosedServiceTypes()
-        {
-            var closedServiceTypes =
-                from registrationGroup in this.RegistrationGroups
-                select registrationGroup.ServiceType;
+        protected override Type[] GetAllKnownClosedServiceTypes() => (
+            from registrationGroup in this.RegistrationGroups
+            select registrationGroup.ServiceType)
+            .Distinct()
+            .ToArray();
 
-            return closedServiceTypes.Distinct().ToArray();
-        }
-
-        private InstanceProducer[] GetAssignableProducers(Type closedServiceType)
-        {
-            var producers =
-                from registrationGroup in this.RegistrationGroups
-                where closedServiceType.IsAssignableFrom(registrationGroup.ServiceType)
-                select registrationGroup.UncontrolledProducer;
-
-            return producers.ToArray();
-        }
+        private InstanceProducer[] GetAssignableProducers(Type closedServiceType) => (
+            from registrationGroup in this.RegistrationGroups
+            where closedServiceType.IsAssignableFrom(registrationGroup.ServiceType)
+            select registrationGroup.UncontrolledProducer)
+            .ToArray();
 
         private InstanceProducer CombineProducersToOne(Type closedServiceType, InstanceProducer[] producers)
         {

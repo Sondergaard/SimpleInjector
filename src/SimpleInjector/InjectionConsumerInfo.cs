@@ -1,38 +1,28 @@
-﻿#region Copyright Simple Injector Contributors
-/* The Simple Injector is an easy-to-use Inversion of Control library for .NET
- * 
- * Copyright (c) 2015-2016 Simple Injector Contributors
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and 
- * associated documentation files (the "Software"), to deal in the Software without restriction, including 
- * without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell 
- * copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the 
- * following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in all copies or substantial 
- * portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT 
- * LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO 
- * EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER 
- * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE 
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
-*/
-#endregion
+﻿// Copyright (c) Simple Injector Contributors. All rights reserved.
+// Licensed under the MIT License. See LICENSE file in the project root for license information.
 
 namespace SimpleInjector
 {
     using System;
-    using System.ComponentModel;
     using System.Reflection;
+    using SimpleInjector.Advanced;
 
     /// <summary>
-    /// Contains contextual information about the direct consumer for which the given dependency is injected
-    /// into.
+    /// Contextual information the a dependency and its direct consumer for which the dependency is injected
+    /// into. The consumer's type is given by the <see cref="ImplementationType"/> property, where the
+    /// <see cref="Target"/> property gives access to the consumer's target element (property or constructor
+    /// argument) in which the dependency will be injected, and the dependency's type information.
     /// </summary>
-    public class InjectionConsumerInfo
+    public class InjectionConsumerInfo : ApiObject, IEquatable<InjectionConsumerInfo?>
     {
-        internal static readonly InjectionConsumerInfo Root = null;
+        // Bogus values for implementationType and property. They will never be used, but can't be null.
+        internal static readonly InjectionConsumerInfo Root =
+            new InjectionConsumerInfo(
+                implementationType: typeof(object),
+                property: typeof(string).GetProperties()[0]);
+
+        private readonly Type implementationType;
+        private readonly InjectionTargetInfo target;
 
         /// <summary>Initializes a new instance of the <see cref="InjectionConsumerInfo"/> class.</summary>
         /// <param name="parameter">The constructor parameter for the created component.</param>
@@ -40,8 +30,8 @@ namespace SimpleInjector
         {
             Requires.IsNotNull(parameter, nameof(parameter));
 
-            this.Target = new InjectionTargetInfo(parameter);
-            this.ImplementationType = parameter.Member.DeclaringType;
+            this.target = new InjectionTargetInfo(parameter);
+            this.implementationType = parameter.Member.DeclaringType;
         }
 
         /// <summary>Initializes a new instance of the <see cref="InjectionConsumerInfo"/> class.</summary>
@@ -52,42 +42,66 @@ namespace SimpleInjector
             Requires.IsNotNull(implementationType, nameof(implementationType));
             Requires.IsNotNull(property, nameof(property));
 
-            this.Target = new InjectionTargetInfo(property);
-            this.ImplementationType = implementationType;
-        }
-
-        /// <summary>Gets the service type of the consumer of the component that should be created.</summary>
-        /// <value>The closed generic service type.</value>
-        [Obsolete(
-            "This property has been removed. Please use ImplementationType instead. " +
-            "See https://simpleinjector.org/depr3.",
-            error: true)]
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        public Type ServiceType
-        {
-            get
-            {
-                throw new NotSupportedException(
-                    "This property has been removed. Please use ImplementationType instead. " +
-                    "See https://simpleinjector.org/depr3.");
-            }
+            this.target = new InjectionTargetInfo(property);
+            this.implementationType = implementationType;
         }
 
         /// <summary>Gets the implementation type of the consumer of the component that should be created.</summary>
         /// <value>The implementation type.</value>
-        public Type ImplementationType { get; }
+        public Type ImplementationType
+        {
+            get
+            {
+#if DEBUG
+                // Check to make sure that this property is never used internally on the Root instance.
+                if (this.IsRoot)
+                {
+                    throw new InvalidOperationException("Can't be called on Root.");
+                }
+#endif
+
+                return this.implementationType;
+            }
+        }
 
         /// <summary>
         /// Gets the information about the consumer's target in which the dependency is injected. The target
         /// can be either a property or a constructor parameter.
         /// </summary>
         /// <value>The <see cref="InjectionTargetInfo"/> for this context.</value>
-        public InjectionTargetInfo Target { get; }
+        public InjectionTargetInfo Target
+        {
+            get
+            {
+#if DEBUG
+                // Check to make sure that this property is never used internally on the Root instance.
+                if (this.IsRoot)
+                {
+                    throw new InvalidOperationException("Can't be called on Root.");
+                }
+#endif
 
-        /// <summary>Returns a string that represents the <see cref="InjectionConsumerInfo"/>.</summary>
-        /// <returns>A string.</returns>
+                return this.target;
+            }
+        }
+
+        internal bool IsRoot => object.ReferenceEquals(this, Root);
+
+        /// <inheritdoc />
+        public override int GetHashCode() => Helpers.Hash(this.implementationType, this.target);
+
+        /// <inheritdoc />
+        public override bool Equals(object obj) => this.Equals(obj as InjectionConsumerInfo);
+
+        /// <inheritdoc />
+        public bool Equals(InjectionConsumerInfo? other) =>
+            other != null
+            && this.implementationType.Equals(other.implementationType)
+            && this.target.Equals(other.target);
+
+        /// <inheritdoc />
         public override string ToString() =>
-            "{ ImplementationType: " + this.ImplementationType.ToFriendlyName() +
-            ", Target.Name: '" + this.Target.Name + "' }";
+            "{ ImplementationType: " + this.implementationType.ToFriendlyName() +
+            ", Target.Name: '" + this.target.Name + "' }";
     }
 }

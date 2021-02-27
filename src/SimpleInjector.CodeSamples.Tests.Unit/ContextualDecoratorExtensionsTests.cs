@@ -11,11 +11,12 @@
         public void GetInstance_ResolvingConditionallyDecoratedInstanceWithPredicateTrue_AppliesTheDecorator()
         {
             // Arrange
-            var container = new Container();
+            var container = ContainerFactory.New();
 
             container.Options.EnableContextualDecoratorSupport();
 
             container.Register<ICommandHandler<RealCommand>, NullCommandHandler<RealCommand>>();
+            container.Register<Consumer<ICommandHandler<RealCommand>>>();
 
             container.RegisterContextualDecorator(typeof(ICommandHandler<>), typeof(CommandHandlerDecorator<>),
                 parameter => true);
@@ -31,11 +32,12 @@
         public void GetInstance_ResolvingConditionallyDecoratedInstanceWithPredicateFalse_DoesNotApplyTheDecorator()
         {
             // Arrange
-            var container = new Container();
+            var container = ContainerFactory.New();
 
             container.Options.EnableContextualDecoratorSupport();
 
             container.Register<ICommandHandler<RealCommand>, NullCommandHandler<RealCommand>>();
+            container.Register<Consumer<ICommandHandler<RealCommand>>>();
 
             container.RegisterContextualDecorator(typeof(ICommandHandler<>), typeof(CommandHandlerDecorator<>),
                 parameter => false);
@@ -51,11 +53,13 @@
         public void GetInstance_ResolvingConditionallyDecoratedInstanceWithConditionalPredicate_AppliesDecoratorsBasedOnPredicate()
         {
             // Arrange
-            var container = new Container();
+            var container = ContainerFactory.New();
 
             container.Options.EnableContextualDecoratorSupport();
 
             container.Register<ICommandHandler<RealCommand>, NullCommandHandler<RealCommand>>();
+            container.Register<Consumer<ICommandHandler<RealCommand>>>();
+            container.Register<CachedConsumer<ICommandHandler<RealCommand>>>();
 
             container.RegisterContextualDecorator(typeof(ICommandHandler<>), typeof(CommandHandlerDecorator<>),
                 parameter => parameter.Name.StartsWith("cached"));
@@ -76,21 +80,22 @@
         public void GetInstance_ResolvingInstanceWithTwoConditionallyDecoratorsRegistered_AppliesBothDecorators()
         {
             // Arrange
-            var container = new Container();
+            var container = ContainerFactory.New();
 
             container.Options.EnableContextualDecoratorSupport();
 
             container.Register<ICommandHandler<RealCommand>, NullCommandHandler<RealCommand>>();
+            container.Register<Consumer<ICommandHandler<RealCommand>>>();
 
             container.RegisterContextualDecorator(
-                typeof(ICommandHandler<>), 
+                typeof(ICommandHandler<>),
                 typeof(CommandHandlerDecorator<>),
                 parameter => true);
 
             container.RegisterContextualDecorator(
-                typeof(ICommandHandler<>), 
+                typeof(ICommandHandler<>),
                 typeof(AnotherCommandHandlerDecorator<>),
-                parameter => true);            
+                parameter => true);
 
             // Act
             var consumer = container.GetInstance<Consumer<ICommandHandler<RealCommand>>>();
@@ -107,11 +112,13 @@
         public void GetInstance_ResolvingConditionallyDecoratedInstanceWithTwoDecoratorsAndConditionalPredicate_AppliesDecoratorsBasedOnPredicate()
         {
             // Arrange
-            var container = new Container();
+            var container = ContainerFactory.New();
 
             container.Options.EnableContextualDecoratorSupport();
 
             container.Register<ICommandHandler<RealCommand>, NullCommandHandler<RealCommand>>();
+            container.Register<Consumer<ICommandHandler<RealCommand>>>();
+            container.Register<CachedConsumer<ICommandHandler<RealCommand>>>();
 
             container.RegisterContextualDecorator(
                 typeof(ICommandHandler<>),
@@ -141,11 +148,12 @@
         public void GetInstance_ResolvingConditionallyDecoratedInstanceWrappedWithOtherNonTransientDecorator_ThrowsExpectedException()
         {
             // Arrange
-            var container = new Container();
+            var container = ContainerFactory.New();
 
             container.Options.EnableContextualDecoratorSupport();
 
             container.Register<ICommandHandler<RealCommand>, NullCommandHandler<RealCommand>>();
+            container.Register<Consumer<ICommandHandler<RealCommand>>>();
 
             container.RegisterContextualDecorator(typeof(ICommandHandler<>), typeof(CommandHandlerDecorator<>),
                 parameter => false);
@@ -173,11 +181,12 @@
         public void GetInstance_ResolvingInstanceWithTwoConditionalDecoratorsWhereInnerDecoratorIsWrappedWithNonTransientDecorator_ThrowsExpectedException()
         {
             // Arrange
-            var container = new Container();
+            var container = ContainerFactory.New();
 
             container.Options.EnableContextualDecoratorSupport();
 
             container.Register<ICommandHandler<RealCommand>, NullCommandHandler<RealCommand>>();
+            container.Register<Consumer<ICommandHandler<RealCommand>>>();
 
             container.RegisterContextualDecorator(
                 typeof(ICommandHandler<>),
@@ -218,7 +227,7 @@
         public void RegisterContextualDecorator_CalledBeforeEnableContextualDecoratorSupport_ThrowsException()
         {
             // Arrange
-            var container = new Container();
+            var container = ContainerFactory.New();
 
             try
             {

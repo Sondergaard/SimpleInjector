@@ -72,6 +72,8 @@
             // Arrange
             var container = new Container();
 
+            container.Register<ConcreteCommand>();
+
             // Act
             using (var scope = AsyncScopedLifestyle.BeginScope(container))
             {
@@ -162,7 +164,7 @@
             catch (ActivationException ex)
             {
                 AssertThat.ExceptionMessageContains(@"
-                    ConcreteCommand is registered as 'Async Scoped' lifestyle, but the instance is
+                    ConcreteCommand is registered using the 'Async Scoped' lifestyle, but the instance is
                     requested outside the context of an active (Async Scoped) scope."
                     .TrimInside(),
                     ex);
@@ -290,10 +292,10 @@
         public void AsyncScopedLifestyleDispose_TransientDisposableObject_DoesNotDisposeInstanceAfterAsyncScopedLifestyleEnds()
         {
             // Arrange
-            var container = new Container();
+            var container = ContainerFactory.New();
 
             // Transient
-            container.Register<ICommand, DisposableCommand>();
+            container.Register<DisposableCommand>();
 
             DisposableCommand command;
 
@@ -313,11 +315,12 @@
         public void AsyncScopedLifestyleDispose_WithInstanceExplicitlyRegisteredForDisposal_DisposesThatInstance()
         {
             // Arrange
-            var container = new Container();
+            var container = ContainerFactory.New();
+
             var scopedLifestyle = new AsyncScopedLifestyle();
 
             // Transient
-            container.Register<ICommand, DisposableCommand>();
+            container.Register<DisposableCommand>();
 
             container.RegisterInitializer<DisposableCommand>(instance =>
             {
@@ -342,9 +345,11 @@
         }
 
         [TestMethod]
-        public void RegisterForDisposal_WithNullArgument_ThrowsExpectedException()
+        public void RegisterIDisposableForDisposal_WithNullArgument_ThrowsExpectedException()
         {
             // Arrange
+            IDisposable invalidArgument = null;
+
             var container = new Container();
 
             // Act
@@ -352,7 +357,31 @@
             {
                 try
                 {
-                    scope.RegisterForDisposal(null);
+                    scope.RegisterForDisposal(invalidArgument);
+
+                    Assert.Fail("Exception expected.");
+                }
+                catch (ArgumentNullException)
+                {
+                    // This exception is expected.
+                }
+            }
+        }
+
+        [TestMethod]
+        public void RegisterIAsyncDisposableForDisposal_WithNullArgument_ThrowsExpectedException()
+        {
+            // Arrange
+            IAsyncDisposable invalidArgument = null;
+
+            var container = new Container();
+
+            // Act
+            using (var scope = AsyncScopedLifestyle.BeginScope(container))
+            {
+                try
+                {
+                    scope.RegisterForDisposal(invalidArgument);
 
                     Assert.Fail("Exception expected.");
                 }
@@ -406,6 +435,7 @@
         {
             // Arrange
             var container = new Container();
+            container.Options.EnableAutoVerification = false;
 
             container.Register<DisposableCommand>(Lifestyle.Singleton);
 
@@ -530,7 +560,7 @@
             var container = new Container();
 
             // This locks the container.
-            container.GetInstance<ConcreteCommand>();
+            container.GetInstance<Container>();
 
             try
             {
@@ -563,7 +593,7 @@
             // Arrange
             int initializerCallCount = 0;
 
-            var container = new Container();
+            var container = ContainerFactory.New();
 
             container.Register<ICommand, ConcreteCommand>(new AsyncScopedLifestyle());
 
@@ -586,7 +616,7 @@
             // Arrange
             int initializerCallCount = 0;
 
-            var container = new Container();
+            var container = ContainerFactory.New();
 
             container.Register<ICommand>(() => new ConcreteCommand(), new AsyncScopedLifestyle());
 
@@ -741,7 +771,7 @@
 
             var lifestyle = new AsyncScopedLifestyle();
 
-            container.Register<DisposableCommand, DisposableCommand>(lifestyle);
+            container.Register<DisposableCommand>(lifestyle);
 
             container.RegisterInitializer<DisposableCommand>(command =>
             {
@@ -777,8 +807,11 @@
             DisposableCommand transientInstanceToDispose = null;
 
             var container = new Container();
+            container.Options.EnableAutoVerification = false;
 
             var lifestyle = new AsyncScopedLifestyle();
+
+            container.Register<DisposableCommand>();
 
             container.RegisterInitializer<DisposableCommand>(command =>
             {
@@ -870,13 +903,13 @@
 
             var actualOrderOfDisposal = new List<Type>();
 
-            var container = new Container();
+            var container = ContainerFactory.New();
 
             // Outer, Middle and Inner all depend on Func<object> and call it when disposed.
             // This way we can check in which order the instances are disposed.
             container.RegisterInstance<Action<object>>(instance => actualOrderOfDisposal.Add(instance.GetType()));
 
-            // Outer depends on Middle that depends on Inner. 
+            // Outer depends on Middle that depends on Inner.
             // Registration is deliberately made in a different order to prevent that the order of
             // registration might influence the order of disposing.
             var lifestyle = new AsyncScopedLifestyle();
@@ -922,16 +955,16 @@
 
             var actualOrderOfDisposal = new List<Type>();
 
-            var container = new Container();
+            var container = ContainerFactory.New();
 
-            // Allow PropertyDependency to be injected as property on Inner 
+            // Allow PropertyDependency to be injected as property on Inner
             container.Options.PropertySelectionBehavior = new InjectProperties<ImportAttribute>();
 
             // PropertyDependency, Middle and Inner all depend on Func<object> and call it when disposed.
             // This way we can check in which order the instances are disposed.
             container.RegisterInstance<Action<object>>(instance => actualOrderOfDisposal.Add(instance.GetType()));
 
-            // Middle depends on Inner that depends on property PropertyDependency. 
+            // Middle depends on Inner that depends on property PropertyDependency.
             // Registration is deliberately made in a different order to prevent that the order of
             // registration might influence the order of disposing.
             var lifestyle = new AsyncScopedLifestyle();
@@ -1082,13 +1115,18 @@
         public void BuildExpression_ManuallyCompiledToDelegate_CanBeExecutedSuccessfully()
         {
             // Arrange
-            var container = new Container();
+            var container = ContainerFactory.New();
 
             container.Register<ICommand, ConcreteCommand>(new AsyncScopedLifestyle());
 
-            var factory = Expression.Lambda<Func<ICommand>>(
-                container.GetRegistration(typeof(ICommand)).BuildExpression())
-                .Compile();
+            // Creating the instance for type ICommand failed. The configuration is invalid. 
+            // The type ConcreteCommand is directly or indirectly depending on itself. 
+            // The cyclic graph contains the following types: ConcreteCommand. 
+            // Verification was triggered because Container.Options.EnableAutoVerification was enabled. 
+            // To prevent the container from being verified on first resolve, set the value to false. 
+            InstanceProducer producer = container.GetRegistration(typeof(ICommand));
+            Expression expression = producer.BuildExpression();
+            var factory = Expression.Lambda<Func<ICommand>>(expression).Compile();
 
             using (AsyncScopedLifestyle.BeginScope(container))
             {

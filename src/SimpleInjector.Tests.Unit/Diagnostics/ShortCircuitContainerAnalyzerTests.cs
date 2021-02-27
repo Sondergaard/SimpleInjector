@@ -27,6 +27,7 @@
         {
             // Arrange
             var container = new Container();
+            container.Options.ResolveUnregisteredConcreteTypes = true;
 
             container.Register<IUnitOfWork, MyUnitOfWork>(Lifestyle.Singleton);
 
@@ -52,6 +53,7 @@
         {
             // Arrange
             var container = new Container();
+            container.Options.ResolveUnregisteredConcreteTypes = true;
 
             container.Register<IUnitOfWork, MyUnitOfWork>(Lifestyle.Singleton);
 
@@ -72,6 +74,7 @@
         {
             // Arrange
             var container = new Container();
+            container.Options.ResolveUnregisteredConcreteTypes = true;
 
             // HomeController depends on MyUnitOfWork.
             container.Register<IUnitOfWork, MyUnitOfWork>(Lifestyle.Singleton);
@@ -97,6 +100,7 @@
         {
             // Arrange
             var container = new Container();
+            container.Options.ResolveUnregisteredConcreteTypes = true;
 
             var registration = Lifestyle.Singleton.CreateRegistration<ImplementsBothInterfaces>(container);
 
@@ -114,7 +118,7 @@
             Assert.AreEqual(1, results.Length);
             Assert.AreEqual(typeof(Controller<int>).ToFriendlyName(), results[0].Name);
             Assert.AreEqual(
-                "Controller<Int32> might incorrectly depend on unregistered type ImplementsBothInterfaces " +
+                "Controller<int> might incorrectly depend on unregistered type ImplementsBothInterfaces " +
                 "(Transient) instead of IService1 (Singleton) or IService2 (Singleton).",
                 results[0].Description);
         }
@@ -124,6 +128,7 @@
         {
             // Arrange
             var container = new Container();
+            container.Options.ResolveUnregisteredConcreteTypes = true;
 
             var registration = Lifestyle.Singleton.CreateRegistration<ImplementsBothInterfaces>(container);
 
@@ -141,17 +146,18 @@
 
             // Assert
             Assert.AreEqual("Controller<T>", results.Name);
-            Assert.AreEqual("2 short circuited components.", results.Description);
+            Assert.AreEqual("2 short-circuited components.", results.Description);
             AssertThat.IsInstanceOfType(typeof(DebuggerViewItem[]), results.Value);
             Assert.AreEqual(2, ((DebuggerViewItem[])results.Value).Length);
         }
 
-        // Checks #248. 
+        // Checks #248.
         [TestMethod]
         public void Analyze_ShortCiruitedRegistrationWithSameLifestyle_ReportsExpectedWarning()
         {
             // Arrange
             var container = new Container();
+            container.Options.ResolveUnregisteredConcreteTypes = true;
 
             container.Register<ILogger, NullLogger>();
             container.Register<ServiceDependingOn<NullLogger>>();
@@ -171,6 +177,7 @@
         {
             // Arrange
             var container = new Container();
+            container.Options.ResolveUnregisteredConcreteTypes = true;
 
             container.RegisterDecorator<ILogger, LoggerDecorator>();
             container.Register<ILogger, NullLogger>();
@@ -190,7 +197,7 @@
             var results = item.Value as DebuggerViewItem[];
 
             return results
-                .Single(result => result.Name == "Possible Short Circuited Dependencies")
+                .Single(result => result.Name == "Possible Short-Circuited Dependencies")
                 .Value as DebuggerViewItem[];
         }
 

@@ -92,6 +92,23 @@
         }
 
         [TestMethod]
+        public void RegisterCollectionServiceAssemblyEnumerableLifestyle_RegisteringNonGenericServiceAndAssemblyWithMultipleImplementations_RegistersThoseImplementations()
+        {
+            // Arrange
+            var container = ContainerFactory.New();
+
+            container.Collection.Register(
+                typeof(ILogStuf), Enumerable.Repeat(CurrentAssembly, 1), Lifestyle.Singleton);
+
+            // Act
+            var loggers1 = container.GetAllInstances<ILogStuf>().ToArray();
+            var loggers2 = container.GetAllInstances<ILogStuf>().ToArray();
+
+            // Assert
+            Assert.IsTrue(loggers1.SequenceEqual(loggers2));
+        }
+
+        [TestMethod]
         public void RegisterCollection_UnexpectedCSharpOverloadResolution_ThrowsDescriptiveException()
         {
             // Arrange
@@ -99,7 +116,7 @@
 
             // Act
             // Here the user might think he calls RegisterCollection(Type, params Type[]), but instead
-            // RegisterCollection<Type>(new[] { typeof(ILogger), typeof(NullLogger) }) is called. 
+            // RegisterCollection<Type>(new[] { typeof(ILogger), typeof(NullLogger) }) is called.
             Action action = () => container.Collection.Register(typeof(ILogger), typeof(NullLogger));
 
             // Assert
@@ -108,6 +125,45 @@
                 "a different method for you than you expected to call. The method C# selected for you is: " +
                 "Container.Collection.Register<Type>",
                 action);
+        }
+
+        [TestMethod]
+        public void RegisterCollectionGeneric_WithTypesAndLifestyle_RespectsTheRegisteredLifestyle()
+        {
+            // Arrange
+            var container = new Container();
+
+            container.Collection.Register<ILogger>(
+                new[] { typeof(NullLogger), typeof(ConsoleLogger) },
+                Lifestyle.Singleton);
+
+            // Act
+            var loggers1 = container.GetAllInstances<ILogger>().ToArray();
+            var loggers2 = container.GetAllInstances<ILogger>().ToArray();
+
+            // Assert
+            Assert.AreEqual(2, loggers1.Length);
+            Assert.IsTrue(loggers1.SequenceEqual(loggers2));
+        }
+
+        [TestMethod]
+        public void RegisterCollectionNonGeneric_WithTypesAndLifestyle_RespectsTheRegisteredLifestyle()
+        {
+            // Arrange
+            var container = new Container();
+
+            container.Collection.Register(
+                typeof(ILogger),
+                new[] { typeof(NullLogger), typeof(ConsoleLogger) },
+                Lifestyle.Singleton);
+
+            // Act
+            var loggers1 = container.GetAllInstances<ILogger>().ToArray();
+            var loggers2 = container.GetAllInstances<ILogger>().ToArray();
+
+            // Assert
+            Assert.AreEqual(2, loggers1.Length);
+            Assert.IsTrue(loggers1.SequenceEqual(loggers2));
         }
 
         [TestMethod]
@@ -302,15 +358,19 @@
 
             container.Register<ILogger, FakeLogger>(Lifestyle.Singleton);
 
-            container.Collection.Register(typeof(IEventHandler<>), new[] { typeof(EventHandlerWithLoggerDependency<>) });
+            container.Collection.Register(typeof(IEventHandler<>), new[]
+            {
+                // Depends on ILogger
+                typeof(EventHandlerWithLoggerDependency<>)
+            });
 
             container.Register<ServiceWithDependency<IEnumerable<IEventHandler<ClassEvent>>>>();
 
             container.Verify();
 
             var expectedRelationship = new KnownRelationship(
-                implementationType: typeof(EventHandlerWithLoggerDependency<ClassEvent>),
-                lifestyle: Lifestyle.Transient,
+                implementationType: typeof(IEnumerable<IEventHandler<ClassEvent>>),
+                lifestyle: Lifestyle.Singleton,
                 dependency: container.GetRegistration(typeof(ILogger)));
 
             // Act
@@ -318,10 +378,8 @@
                 container.GetRegistration(typeof(IEnumerable<IEventHandler<ClassEvent>>)).GetRelationships()
                 .Single();
 
-            // Assert
             Assert.AreEqual(expectedRelationship.ImplementationType, actualRelationship.ImplementationType);
             Assert.AreEqual(expectedRelationship.Lifestyle, actualRelationship.Lifestyle);
-            Assert.AreEqual(expectedRelationship.Dependency, actualRelationship.Dependency);
         }
 
         [TestMethod]
@@ -732,7 +790,7 @@
             catch (ArgumentException ex)
             {
                 AssertThat.ExceptionMessageContains(
-                    @"You are trying to register Type as a service type, 
+                    @"You are trying to register Type as a service type,
                       but registering this type is not allowed to be registered"
                     .TrimInside(),
                     ex,
@@ -1551,7 +1609,7 @@
 
             container.Collection.Register(typeof(IEventHandler<>), new[]
             {
-                // This closed generic type has an ILogger constructor dependency, but ILogger is not 
+                // This closed generic type has an ILogger constructor dependency, but ILogger is not
                 // registered, and Verify() should catch this.
                 typeof(EventHandlerWithDependency<AuditableEvent, ILogger>)
             });
@@ -1561,7 +1619,7 @@
 
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<InvalidOperationException>(
-                "Please ensure ILogger is registered",
+                "For ILogger to be resolved, it must be registered in the container.",
                 action);
         }
 
@@ -1588,15 +1646,16 @@
 
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<InvalidOperationException>(
-                "Please ensure ILogger is registered",
+                "For ILogger to be resolved, it must be registered in the container",
                 action);
         }
 
         [TestMethod]
-        public void Verify_ClosedTypeWithUnregisteredDependencyResolvedBeforeCallingVerift_StillThrowsException()
+        public void Verify_ClosedTypeWithUnregisteredDependencyResolvedBeforeCallingVerify_StillThrowsException()
         {
             // Arrange
             var container = ContainerFactory.New();
+            container.Options.EnableAutoVerification = false;
 
             container.Collection.Register(typeof(IEventHandler<>), new[]
             {
@@ -1612,7 +1671,7 @@
 
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<InvalidOperationException>(
-                "Please ensure ILogger is registered",
+                "For ILogger to be resolved, it must be registered in the container.",
                 action);
         }
 
@@ -1639,7 +1698,7 @@
 
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<InvalidOperationException>(
-                "Please ensure IUserRepository is registered",
+                "For IUserRepository to be resolved, it must be registered in the container",
                 action);
         }
 
@@ -2219,8 +2278,8 @@
 
             // Assert
             Assert.IsTrue(expectedHandlerTypes.SequenceEqual(actualHandlerTypes),
-                @"The registrations for IEventHandler<CustomerMovedEvent> that are assignable to 
-                IEventHandler<CustomerMovedAbroadEvent> are expected to 'flow' to the 
+                @"The registrations for IEventHandler<CustomerMovedEvent> that are assignable to
+                IEventHandler<CustomerMovedAbroadEvent> are expected to 'flow' to the
                 IEventHandler<CustomerMovedAbroadEvent> collection, because the expected way for users to
                 register generic types by supplying the RegisterCollection(Type, Type[]) overload as follows:
                 container.RegisterManyForOpenGeneric(type, container.Collection.Register, assemblies)."
@@ -2234,6 +2293,7 @@
         {
             // Arrange
             var container = new Container();
+            container.Options.ResolveUnregisteredConcreteTypes = true;
 
             container.Collection.Register<ITimeProvider>(new[] { typeof(RealTimeProvider) });
 
@@ -2282,8 +2342,8 @@
 
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<NotSupportedException>(@"
-                You already made a registration for IEventHandler<TEvent> using one of the 
-                Container.Collection.Register overloads that registers container-uncontrolled collections, while this 
+                You already made a registration for IEventHandler<TEvent> using one of the
+                Container.Collection.Register overloads that registers container-uncontrolled collections, while this
                 method registers container-controlled collections. Mixing calls is not supported."
                 .TrimInside(),
                 action);
@@ -2304,8 +2364,8 @@
 
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<NotSupportedException>(@"
-                You already made a registration for IEventHandler<TEvent> using one of the 
-                Container.Collection.Register overloads that registers container-controlled collections, while this 
+                You already made a registration for IEventHandler<TEvent> using one of the
+                Container.Collection.Register overloads that registers container-controlled collections, while this
                 method registers container-uncontrolled collections. Mixing calls is not supported."
                 .TrimInside(),
                 action);
@@ -2491,7 +2551,7 @@
             Assert.AreEqual(0, bases.Count(), "No registrations were made for IContra<Base>.");
         }
 
-        //  Test for #638.
+        // Test for #638.
         [TestMethod]
         public void GetAllInstances_TwoOpenGenericCovariantsWithTypeConstraintsRegistered_ResolvesExpectedInstances()
         {
@@ -2514,6 +2574,54 @@
             AssertThat.SequenceEquals(
                 expectedTypes: new[] { typeof(BaseClassCovariant<BaseClass>) },
                 actualTypes: bases.Select(d => d.GetType()).ToArray());
+        }
+
+        // Test for #441
+        [TestMethod]
+        public void GetAllInstances_OnUnregisteredCollection_ThrowsExceptionThatDescribesHowCollectionsMustBeRegistered()
+        {
+            // Arrange
+            var container = new Container();
+
+            // to ensure the container isn't empty
+            container.RegisterInstance(new object());
+
+            // Act
+            // resolve an unregistered collection
+            Action action = () => container.GetAllInstances<IPlugin>();
+
+            // Assert
+            AssertThat.ThrowsWithExceptionMessageContains<ActivationException>(@"
+                No registration for type IEnumerable<IPlugin> could be found. You can use one of the
+                Container.Collection.Register overloads to register a collection of IPlugin types, or one of
+                the Container.Collection.Append overloads to append a single registration to a collection.
+                In case you intend to resolve an empty collection of IPlugin elements, make sure you register
+                an empty collection; Simple Injector requires a call to Container.Collection.Register to be
+                made, even in the absence of any instances.
+                Please see https://simpleinjector.org/collections for more information about registering and
+                resolving collections."
+                .TrimInside(),
+                action);
+        }
+
+        // Test for #441
+        [TestMethod]
+        public void GetInstance_OnTypeDependingOnUnregisteredCollection_ThrowsExceptionThatDescribesHowCollectionsMustBeRegistered()
+        {
+            // Arrange
+            var container = new Container();
+
+            container.Register<ServiceDependingOn<ICollection<IPlugin>>>();
+
+            // Act
+            Action action = () => container.GetInstance<ServiceDependingOn<ICollection<IPlugin>>>();
+
+            // Assert
+            AssertThat.ThrowsWithExceptionMessageContains<ActivationException>(@"
+                In case you intend to resolve an empty collection of IPlugin elements, make sure you register
+                an empty collection"
+                .TrimInside(),
+                action);
         }
 
         private static void Assert_IsNotAMutableCollection<T>(IEnumerable<T> collection)

@@ -65,7 +65,7 @@
             // Assert
             AssertThat.ThrowsWithParamName<ArgumentException>("registration", action);
             AssertThat.ThrowsWithExceptionMessageContains<ArgumentException>(
-                "The supplied Registration belongs to a different container.", action);
+                "The supplied Registration belongs to a different Container", action);
         }
 
         [TestMethod]
@@ -212,9 +212,7 @@
                 .Select(h => h.GetType()).ToArray();
 
             // Assert
-            Assert.AreEqual(
-                expected: expectedHandlerTypes.ToFriendlyNamesText(),
-                actual: actualHandlerTypes.ToFriendlyNamesText());
+            AssertThat.SequenceEquals(expectedHandlerTypes, actualHandlerTypes);
         }
 
         [TestMethod]
@@ -240,9 +238,7 @@
                 .Select(h => h.GetType()).ToArray();
 
             // Assert
-            Assert.AreEqual(
-                expected: expectedHandlerTypes.ToFriendlyNamesText(),
-                actual: actualHandlerTypes.ToFriendlyNamesText());
+            AssertThat.SequenceEquals(expectedHandlerTypes, actualHandlerTypes);
         }
 
         [TestMethod]
@@ -267,9 +263,7 @@
                 .Select(h => h.GetType()).ToArray();
 
             // Assert
-            Assert.AreEqual(
-                expected: expectedHandlerTypes.ToFriendlyNamesText(),
-                actual: actualHandlerTypes.ToFriendlyNamesText());
+            AssertThat.SequenceEquals(expectedHandlerTypes, actualHandlerTypes);
         }
 
         [TestMethod]
@@ -299,9 +293,7 @@
                 .Select(h => h.GetType()).ToArray();
 
             // Assert
-            Assert.AreEqual(
-                expected: expectedHandlerTypes.ToFriendlyNamesText(),
-                actual: actualHandlerTypes.ToFriendlyNamesText());
+            AssertThat.SequenceEquals(expectedHandlerTypes, actualHandlerTypes);
         }
 
         [TestMethod]
@@ -327,9 +319,62 @@
                 .Select(h => h.GetType()).ToArray();
 
             // Assert
-            Assert.AreEqual(
-                expected: expectedHandlerTypes.ToFriendlyNamesText(),
-                actual: actualHandlerTypes.ToFriendlyNamesText());
+            AssertThat.SequenceEquals(expectedHandlerTypes, actualHandlerTypes);
+        }
+
+        [TestMethod]
+        public void GetAllInstances_AppendingInstancesOfOpenGenericImplementations_ResolvesTheExpectedCollection()
+        {
+            // Arrange
+            Type[] expectedHandlerTypes = new[]
+            {
+                typeof(NewConstraintEventHandler<StructEvent>),
+                typeof(StructConstraintEventHandler<StructEvent>),
+            };
+
+            var container = ContainerFactory.New();
+
+            container.Collection.Register(typeof(IEventHandler<>), new[] { typeof(NewConstraintEventHandler<>) });
+
+            container.Collection
+                .AppendInstance(typeof(IEventHandler<>), new StructConstraintEventHandler<StructEvent>());
+
+            // AuditableEventEventHandler<AuditableEvent> can be registered, and resolved, but should not
+            // be resolved as part of IEnumerable<IEventHandler<StructEvent>>.
+            container.Collection
+                .AppendInstance(typeof(IEventHandler<>), new AuditableEventEventHandler<AuditableEvent>());
+
+            // Act
+            var handlers = container.GetAllInstances(typeof(IEventHandler<StructEvent>));
+            Type[] actualHandlerTypes = handlers.Select(h => h.GetType()).ToArray();
+
+            // Assert
+            AssertThat.SequenceEquals(expectedHandlerTypes, actualHandlerTypes);
+        }
+        
+        [TestMethod]
+        public void GetAllInstances_AppendingInstancesOfClosedGenericImplementation_ResolvesTheExpectedCollection()
+        {
+            // Arrange
+            Type[] expectedHandlerTypes = new[]
+            {
+                typeof(NewConstraintEventHandler<StructEvent>),
+                typeof(AuditableEventEventHandler<StructEvent>),
+            };
+
+            var container = ContainerFactory.New();
+
+            container.Collection.Register(typeof(IEventHandler<>), new[] { typeof(NewConstraintEventHandler<>) });
+
+            container.Collection
+                .AppendInstance<IEventHandler<StructEvent>>(new AuditableEventEventHandler<StructEvent>());
+
+            // Act
+            var handlers = container.GetAllInstances(typeof(IEventHandler<StructEvent>));
+            Type[] actualHandlerTypes = handlers.Select(h => h.GetType()).ToArray();
+
+            // Assert
+            AssertThat.SequenceEquals(expectedHandlerTypes, actualHandlerTypes);
         }
 
         [TestMethod]
@@ -339,7 +384,7 @@
             var container = ContainerFactory.New();
 
             container.Collection.Register(typeof(IEventHandler<>), new[]
-            { 
+            {
                 // Here we make a closed registration; this causes an explicit registration for the
                 // IEventHandlerStructEvent> collection.
                 typeof(NewConstraintEventHandler<StructEvent>),
@@ -384,6 +429,52 @@
             // Assert
             AssertThat.IsInstanceOfType(typeof(StructConstraintEventHandler<StructEvent>), handler1);
             Assert.AreSame(handler1, handler2, "The instance was expected to be registered as singleton");
+        }
+
+        // #857
+        [TestMethod]
+        public void GetAllInstances_OpenGenericAppendedWithDifferentLifestyles_ResolvesInstancesUsingExpectedLifestyle()
+        {
+            // Arrange
+            var container = ContainerFactory.New();
+
+            container.Collection.Append(typeof(IEventHandler<>), typeof(NewConstraintEventHandler<>));
+            container.Collection.Append(typeof(IEventHandler<>), typeof(StructConstraintEventHandler<>),
+                Lifestyle.Singleton);
+
+            // Act
+            var handlers1 = container.GetAllInstances<IEventHandler<StructEvent>>().ToArray();
+            var handlers2 = container.GetAllInstances<IEventHandler<StructEvent>>().ToArray();
+
+            // Assert
+            Assert.AreEqual(2, handlers1.Count());
+            Assert.AreNotSame(handlers1.First(), handlers2.First());
+            Assert.AreSame(handlers1.Last(), handlers2.Last());
+        }
+
+        [TestMethod]
+        public void GetAllInstances_OpenGenericAppendedWithForwardedLifestyles_ResolvesInstancesUsingExpectedLifestyle()
+        {
+            // Arrange
+            var container = ContainerFactory.New();
+
+            container.Collection.Append(typeof(IEventHandler<>), typeof(NewConstraintEventHandler<>));
+            container.Collection.Append(typeof(IEventHandler<>), typeof(StructConstraintEventHandler<>));
+
+            container.Register(
+                typeof(StructConstraintEventHandler<>),
+                typeof(StructConstraintEventHandler<>),
+                Lifestyle.Singleton);
+
+            container.Register(typeof(IEventHandler<>), typeof(NewConstraintEventHandler<>), Lifestyle.Transient);
+
+            // Act
+            var handlers1 = container.GetAllInstances<IEventHandler<StructEvent>>().ToArray();
+            var handlers2 = container.GetAllInstances<IEventHandler<StructEvent>>().ToArray();
+
+            // Assert
+            Assert.AreNotSame(handlers1.First(), handlers2.First());
+            Assert.AreSame(handlers1.Last(), handlers2.Last());
         }
 
         private static Registration CreateRegistration(Container container) =>

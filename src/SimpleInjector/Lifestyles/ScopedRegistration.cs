@@ -1,87 +1,73 @@
-﻿#region Copyright Simple Injector Contributors
-/* The Simple Injector is an easy-to-use Inversion of Control library for .NET
- * 
- * Copyright (c) 2014-2016 Simple Injector Contributors
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and 
- * associated documentation files (the "Software"), to deal in the Software without restriction, including 
- * without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell 
- * copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the 
- * following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in all copies or substantial 
- * portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT 
- * LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO 
- * EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER 
- * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE 
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
-*/
-#endregion
+﻿// Copyright (c) Simple Injector Contributors. All rights reserved.
+// Licensed under the MIT License. See LICENSE file in the project root for license information.
 
 namespace SimpleInjector.Lifestyles
 {
     using System;
     using System.Linq.Expressions;
+    using System.Runtime.CompilerServices;
 
-    internal sealed class ScopedRegistration<TImplementation> : Registration
-        where TImplementation : class
+    internal sealed class ScopedRegistration : Registration
     {
-        private readonly Func<TImplementation> userSuppliedInstanceCreator;
+        private Func<Scope?>? scopeFactory;
+        private DisposabilityTypeInfo? disposability;
 
-        private Func<Scope> scopeFactory;
-        private Func<TImplementation> instanceCreator;
-
-        internal ScopedRegistration(ScopedLifestyle lifestyle, Container container,
-            Func<TImplementation> instanceCreator)
-            : this(lifestyle, container)
-        {
-            this.userSuppliedInstanceCreator = instanceCreator;
-        }
-
-        internal ScopedRegistration(ScopedLifestyle lifestyle, Container container)
-            : base(lifestyle, container)
+        internal ScopedRegistration(
+            ScopedLifestyle lifestyle, Container container, Type implementationType, Func<object>? creator)
+            : base(lifestyle, container, implementationType, creator)
         {
         }
-
-        public override Type ImplementationType => typeof(TImplementation);
 
         public new ScopedLifestyle Lifestyle => (ScopedLifestyle)base.Lifestyle;
 
-        internal Func<TImplementation> InstanceCreator => this.instanceCreator;
+        // Initialized when BuildExpression is called
+        internal Func<object>? InstanceCreator { get; private set; }
+
+        internal string AdditionalInformationForLifestyleMismatchDiagnostics { get; set; } = string.Empty;
+
+        internal DisposabilityTypeInfo Disposability
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get
+            {
+                if (this.disposability is null)
+                {
+                    this.disposability = new DisposabilityTypeInfo(this.ImplementationType, this);
+                }
+
+                return this.disposability.Value;
+            }
+        }
 
         public override Expression BuildExpression()
         {
-            if (this.instanceCreator == null)
+            if (this.InstanceCreator is null)
             {
                 this.scopeFactory = this.Lifestyle.CreateCurrentScopeProvider(this.Container);
 
-                this.instanceCreator = this.BuildInstanceCreator();
+                this.InstanceCreator = this.BuildTransientDelegate();
             }
 
-            return Expression.Call(Expression.Constant(this), this.GetType().GetMethod("GetInstance"));
+            return Expression.Call(
+                instance: Expression.Constant(this),
+                method: this.GetType().GetMethod(nameof(this.GetInstance))
+                    .MakeGenericMethod(this.ImplementationType));
         }
 
+        internal static ScopedRegistration? GetScopedRegistration(MethodCallExpression node) =>
+            node.Object is ConstantExpression instance
+                ? instance.Value as ScopedRegistration
+                : null;
+
         // This method needs to be public, because the BuildExpression methods build a
-        // MethodCallExpression using this method, and this would fail in partial trust when the 
+        // MethodCallExpression using this method, and this would fail in partial trust when the
         // method is not public.
         // Simple Injector does some aggressive optimizations for scoped lifestyles and this method will
         // is most cases not be called. It will however be called when the expression that is built by
         // this instance will get compiled by someone else than the core library. That's why this method
         // is still important.
-        public TImplementation GetInstance() => Scope.GetInstance(this, this.scopeFactory());
-
-        private Func<TImplementation> BuildInstanceCreator()
-        {
-            if (this.userSuppliedInstanceCreator != null)
-            {
-                return this.BuildTransientDelegate(this.userSuppliedInstanceCreator);
-            }
-            else
-            {
-                return (Func<TImplementation>)this.BuildTransientDelegate();
-            }
-        }
+        public TImplementation GetInstance<TImplementation>()
+            where TImplementation : class =>
+            Scope.GetInstance<TImplementation>(this, this.scopeFactory!());
     }
 }

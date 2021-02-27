@@ -1,40 +1,81 @@
-﻿#region Copyright Simple Injector Contributors
-/* The Simple Injector is an easy-to-use Inversion of Control library for .NET
- * 
- * Copyright (c) 2013 Simple Injector Contributors
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and 
- * associated documentation files (the "Software"), to deal in the Software without restriction, including 
- * without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell 
- * copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the 
- * following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in all copies or substantial 
- * portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT 
- * LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO 
- * EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER 
- * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE 
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
-*/
-#endregion
+﻿// Copyright (c) Simple Injector Contributors. All rights reserved.
+// Licensed under the MIT License. See LICENSE file in the project root for license information.
 
 namespace SimpleInjector.Lifestyles
 {
     using System;
     using System.Collections;
     using System.Collections.Generic;
+    using System.Collections.ObjectModel;
+    using System.Linq;
     using System.Linq.Expressions;
+    using System.Threading;
+    using SimpleInjector.Advanced;
+    using SimpleInjector.Diagnostics;
     using SimpleInjector.Internals;
 
-    internal sealed class SingletonLifestyle : Lifestyle
+    /// <summary>
+    /// The singleton lifestyle.
+    /// </summary>
+    public sealed class SingletonLifestyle : Lifestyle
     {
-        internal SingletonLifestyle() : base("Singleton")
+        // Oh, the irony. Here the Singleton Design Pattern is applied to the Singleton Lifestyle.
+        internal static readonly SingletonLifestyle Instance = new SingletonLifestyle();
+
+        private SingletonLifestyle() : base("Singleton")
         {
         }
 
+        /// <inheritdoc />
         public override int Length => 1000;
+
+        /// <summary>
+        /// Creates a new <see cref="Registration"/> instance defining the creation of the
+        /// specified <paramref name="instance"/>. Properties, decorators, interceptors, and initializers
+        /// may be applied to this instance.
+        /// </summary>
+        /// <param name="instanceType">The type of the instance.</param>
+        /// <param name="instance">The instance to create a registration for.</param>
+        /// <param name="container">The <see cref="Container"/> instance for which a
+        /// <see cref="Registration"/> must be created.</param>
+        /// <returns>A new <see cref="Registration"/> instance.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when on of the supplied arguments is a null
+        /// reference.</exception>
+        public Registration CreateRegistration(Type instanceType, object instance, Container container)
+        {
+            Requires.IsNotNull(instanceType, nameof(instanceType));
+            Requires.IsNotNull(instance, nameof(instance));
+            Requires.IsNotNull(container, nameof(container));
+
+            // The instance type check is done inside CreateSingleInstanceRegistration.
+            return CreateSingleInstanceRegistration(
+                serviceType: instanceType,
+                implementationType: instance!.GetType(),
+                instance: instance!,
+                container: container);
+        }
+
+        // NOTE: This overload is needed because the addition of the (Type, object, Container) overload caused
+        // C# to always pick that overload over the (Type, Func<object>, Container) overload in the base class.
+        /// <summary>
+        /// Creates a new <see cref="Registration"/> instance defining the creation of the
+        /// specified <paramref name="serviceType"/>  using the supplied <paramref name="instanceCreator"/>
+        /// with the caching as specified by this lifestyle.
+        /// </summary>
+        /// <param name="serviceType">The interface or base type that can be used to retrieve the instances.</param>
+        /// <param name="instanceCreator">The delegate that will be responsible for creating new instances.</param>
+        /// <param name="container">The <see cref="Container"/> instance for which a
+        /// <see cref="Registration"/> must be created.</param>
+        /// <returns>A new <see cref="Registration"/> instance.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when on of the supplied arguments is a null
+        /// reference.</exception>
+        public new Registration CreateRegistration(
+            Type serviceType, Func<object> instanceCreator, Container container)
+        {
+            Lifestyle lifestyle = this;
+
+            return lifestyle.CreateRegistration(serviceType, instanceCreator, container);
+        }
 
         // This method seems somewhat redundant, since the exact same can be achieved by calling
         // Lifetime.Singleton.CreateRegistration(serviceType, () => instance, container). Calling that method
@@ -43,90 +84,114 @@ namespace SimpleInjector.Lifestyles
         // (and the extra SingletonInstanceLifestyleRegistration class), we can ensure that the
         // ExpressionBuilding event is called with a ConstantExpression, which is much more intuitive to
         // anyone handling that event.
-        internal static Registration CreateSingleInstanceRegistration(Type serviceType, object instance,
-            Container container, Type implementationType = null)
+        internal static Registration CreateSingleInstanceRegistration(
+            Type serviceType, Type implementationType, object instance, Container container)
         {
             Requires.IsNotNull(instance, nameof(instance));
 
-            return new SingletonInstanceLifestyleRegistration(serviceType, implementationType ?? serviceType,
-                instance, container);
+            // Fixes #589
+            // In case of a COM object, we override the implementation type, because otherwise our internal
+            // type checks (that call Type.IsAssignableFrom) would fail.
+#if !NETSTANDARD1_0 && !NETSTANDARD1_3
+            if (implementationType.IsCOMObject)
+            {
+                implementationType = serviceType;
+            }
+            else
+            {
+                Requires.ServiceIsAssignableFromImplementation(serviceType, instance.GetType(), nameof(serviceType));
+            }
+#endif
+
+            return new SingletonInstanceRegistration(
+                serviceType, implementationType, instance, container);
         }
 
-        internal static InstanceProducer CreateControlledCollectionProducer<TService>(
-            ContainerControlledCollection<TService> collection, Container container)
-        {
-            Registration registration = CreateControlledCollectionRegistration(collection, container);
-
-            return new InstanceProducer(typeof(IEnumerable<TService>), registration);
-        }
-
-        internal static Registration CreateControlledCollectionRegistration<TService>(
-            ContainerControlledCollection<TService> collection, Container container)
-        {
-            var registration = CreateSingleInstanceRegistration(typeof(IEnumerable<TService>), collection, container);
-
-            registration.IsCollection = true;
-
-            return registration;
-        }
-
-        internal static InstanceProducer CreateUncontrolledCollectionProducer(Type itemType, 
-            IEnumerable collection, Container container)
-        {
-            return new InstanceProducer(
+        internal static InstanceProducer CreateUncontrolledCollectionProducer(
+            Type itemType, IEnumerable collection, Container container) =>
+            new InstanceProducer(
                 typeof(IEnumerable<>).MakeGenericType(itemType),
                 CreateUncontrolledCollectionRegistration(itemType, collection, container));
-        }
 
-        internal static Registration CreateUncontrolledCollectionRegistration(Type itemType, 
-            IEnumerable collection, Container container)
+        internal static Registration CreateUncontrolledCollectionRegistration(
+            Type itemType, IEnumerable collection, Container container)
         {
             Type enumerableType = typeof(IEnumerable<>).MakeGenericType(itemType);
 
-            var registration = CreateSingleInstanceRegistration(enumerableType, collection, container);
+            // collection.GetType() could be anything, including internal types, so we don't want to use
+            // that.
+            Type implementationType = enumerableType;
+
+            var registration = CreateSingleInstanceRegistration(
+                serviceType: enumerableType,
+                implementationType: implementationType,
+                instance: collection,
+                container: container);
 
             registration.IsCollection = true;
 
             return registration;
         }
 
-        internal static bool IsSingletonInstanceRegistration(Registration registration) => 
-            registration is SingletonInstanceLifestyleRegistration;
+        internal static bool IsSingletonInstanceRegistration(Registration registration) =>
+            registration is SingletonInstanceRegistration;
 
-        protected internal override Registration CreateRegistrationCore<TConcrete>(Container container) => 
-            new SingletonLifestyleRegistration<TConcrete>(container);
+        /// <inheritdoc />
+        protected internal override Registration CreateRegistrationCore(Type concreteType, Container container)
+        {
+            Requires.IsNotNull(concreteType, nameof(concreteType));
+            Requires.IsNotNull(container, nameof(container));
 
-        protected internal override Registration CreateRegistrationCore<TService>(Func<TService> instanceCreator,
-            Container container)
+            return new SingletonRegistration(container, concreteType);
+        }
+
+        /// <inheritdoc />
+        protected internal override Registration CreateRegistrationCore<TService>(
+            Func<TService> instanceCreator, Container container)
         {
             Requires.IsNotNull(instanceCreator, nameof(instanceCreator));
 
-            return new SingletonLifestyleRegistration<TService>(container, instanceCreator);
+            return new SingletonRegistration(container, typeof(TService), instanceCreator);
         }
 
-        private sealed class SingletonInstanceLifestyleRegistration : Registration
+        private static ConstantExpression BuildConstantExpression(object instance, Type implementationType)
+        {
+            // Fixes #589
+            // Internally, Expression.Constant just does a simple Type.IsAssignableFrom check, which returns
+            // false for COM objects. Unfortunately, the IsCOMObject property is only available in .NET
+            // Standard 2.0 and up.
+#if !NETSTANDARD1_0 && !NETSTANDARD1_3
+            if (instance.GetType().IsCOMObject)
+            {
+                return Expression.Constant(instance);
+            }
+#endif
+
+            return Expression.Constant(instance, implementationType);
+        }
+
+        private sealed class SingletonInstanceRegistration : Registration
         {
             private readonly object locker = new object();
 
             private object instance;
             private bool initialized;
 
-            internal SingletonInstanceLifestyleRegistration(Type serviceType, Type implementationType, 
-                object instance, Container container)
-                : base(Lifestyle.Singleton, container)
+            internal SingletonInstanceRegistration(
+                Type serviceType, Type implementationType, object instance, Container container)
+                : base(Lifestyle.Singleton, container, implementationType)
             {
                 this.instance = instance;
                 this.ServiceType = serviceType;
-                this.ImplementationType = implementationType;
             }
+
+            internal override bool ResolvesExternallyOwnedInstance => true;
 
             public Type ServiceType { get; }
-            public override Type ImplementationType { get; }
 
-            public override Expression BuildExpression()
-            {
-                return Expression.Constant(this.GetInitializedInstance(), this.ImplementationType);
-            }
+            public override Expression BuildExpression() =>
+                SingletonLifestyle.BuildConstantExpression(
+                    this.GetInitializedInstance(), this.ImplementationType);
 
             private object GetInitializedInstance()
             {
@@ -155,18 +220,20 @@ namespace SimpleInjector.Lifestyles
                 catch (MemberAccessException ex)
                 {
                     throw new ActivationException(
-                        StringResources.UnableToResolveTypeDueToSecurityConfiguration(this.ImplementationType, ex));
+                        StringResources.UnableToResolveTypeDueToSecurityConfiguration(
+                            this.ImplementationType, ex));
                 }
             }
 
             private object GetInjectedInterceptedAndInitializedInstanceInternal()
             {
-                Expression expression = Expression.Constant(this.instance, this.ImplementationType);
+                Expression expression =
+                    SingletonLifestyle.BuildConstantExpression(this.instance, this.ImplementationType);
 
                 // NOTE: We pass on producer.ServiceType as the implementation type for the following three
                 // methods. This will the initialization to be only done based on information of the service
-                // type; not on that of the implementation. Although now the initialization could be 
-                // incomplete, this behavior is consistent with the initialization of 
+                // type; not on that of the implementation. Although now the initialization could be
+                // incomplete, this behavior is consistent with the initialization of
                 // Register<TService>(Func<TService>, Lifestyle), which doesn't have the proper static type
                 // information available to use the implementation type.
                 // TODO: This behavior should be reconsidered, because now it is incompatible with
@@ -177,10 +244,10 @@ namespace SimpleInjector.Lifestyles
                 expression = this.InterceptInstanceCreation(this.ServiceType, expression);
                 expression = this.WrapWithInitializer(this.ServiceType, expression);
 
-                // Optimization: We don't need to compile a delegate in case all we have is a constant.
-                if (expression is ConstantExpression)
+                // PERF: We don't need to compile a delegate in case all we have is a constant.
+                if (expression is ConstantExpression constantExpression)
                 {
-                    return ((ConstantExpression)expression).Value;
+                    return constantExpression.Value;
                 }
 
                 Delegate initializer = Expression.Lambda(expression).Compile();
@@ -191,44 +258,35 @@ namespace SimpleInjector.Lifestyles
             }
         }
 
-        private sealed class SingletonLifestyleRegistration<TImplementation> : Registration 
-            where TImplementation : class
+        private sealed class SingletonRegistration : Registration
         {
             private readonly object locker = new object();
-            private readonly Func<TImplementation> instanceCreator;
 
-            private object interceptedInstance;
+            private object? interceptedInstance;
 
-            public SingletonLifestyleRegistration(Container container, Func<TImplementation> instanceCreator = null)
-                : base(Lifestyle.Singleton, container)
+            public SingletonRegistration(
+                Container container, Type implementationType, Func<object>? instanceCreator = null)
+                : base(Lifestyle.Singleton, container, implementationType, instanceCreator)
             {
-                this.instanceCreator = instanceCreator;
             }
 
-            public override Type ImplementationType => typeof(TImplementation);
-
-            public override Expression BuildExpression() => 
-                Expression.Constant(this.GetInterceptedInstance(), this.ImplementationType);
+            public override Expression BuildExpression() =>
+                SingletonLifestyle.BuildConstantExpression(
+                    this.GetInterceptedInstance(), this.ImplementationType);
 
             private object GetInterceptedInstance()
             {
                 // Even though the InstanceProducer takes a lock before calling Registration.BuildExpression
                 // we need to take a lock here, because multiple InstanceProducer instances could reference
                 // the same Registration and call this code in parallel.
-                if (this.interceptedInstance == null)
+                if (this.interceptedInstance is null)
                 {
                     lock (this.locker)
                     {
-                        if (this.interceptedInstance == null)
+                        if (this.interceptedInstance is null)
                         {
-                            this.interceptedInstance = this.CreateInstanceWithNullCheck();
-
-                            var disposable = this.interceptedInstance as IDisposable;
-
-                            if (disposable != null)
-                            {
-                                this.Container.RegisterForDisposal(disposable);
-                            }
+                            this.interceptedInstance = this.GetInterceptedInstanceWithNullCheck();
+                            this.TryRegisterForDisposal(this.interceptedInstance);
                         }
                     }
                 }
@@ -236,45 +294,141 @@ namespace SimpleInjector.Lifestyles
                 return this.interceptedInstance;
             }
 
-            private TImplementation CreateInstanceWithNullCheck()
+            private object TryRegisterForDisposal(object instance)
             {
-                Expression expression =
-                    this.instanceCreator == null
-                        ? this.BuildTransientExpression()
-                        : this.BuildTransientExpression(this.instanceCreator);
-
-                Func<TImplementation> func = CompileExpression(expression);
-
-                TImplementation instance = func();
-
-                EnsureInstanceIsNotNull(instance);
+                if (!this.SuppressDisposal)
+                {
+                    if (DisposableHelpers.IsAsyncOrAsyncDisposable(instance))
+                    {
+                        this.Container.ContainerScope.RegisterForDisposal(instance);
+                    }
+                }
 
                 return instance;
             }
 
-            private static Func<TImplementation> CompileExpression(Expression expression)
+            private object GetInterceptedInstanceWithNullCheck()
+            {
+                // The BuildTransientExpression might cause the instance to be intercepted and properties
+                // to be injected.
+                Expression expression = this.BuildTransientExpression();
+
+                return this.Execute(this.Compile(expression))
+                    ?? throw new ActivationException(
+                        StringResources.DelegateForTypeReturnedNull(this.ImplementationType));
+            }
+
+            // Implements #553 Allows detection of Lifestyle Mismatches when iterated inside constructor.
+            private object Execute(Func<object> instanceCreator)
+            {
+                var isCurrentThread = new ThreadLocal<bool> { Value = true };
+
+                // Create a listener that can spot when an injected stream is iterated during construction.
+                var listener = this.CreateCollectionUsedDuringConstructionListener(isCurrentThread);
+
+                try
+                {
+                    ControlledCollectionHelper.AddServiceCreatedListener(listener);
+
+                    return instanceCreator();
+                }
+                finally
+                {
+                    ControlledCollectionHelper.RemoveServiceCreatedListener(listener);
+                    isCurrentThread.Dispose();
+                }
+            }
+
+            private Action<ServiceCreatedListenerArgs> CreateCollectionUsedDuringConstructionListener(
+                ThreadLocal<bool> isCurrentThread)
+            {
+                return args =>
+                {
+                    // Only handle when an inner registration hasn't handled this yet.
+                    if (!args.Handled)
+                    {
+                        // Only handle when the call originates from the same thread, as calls from different
+                        // threads mean the listener is not triggered from this specific instanceCreator.
+                        if (isCurrentThread.Value)
+                        {
+                            args.Handled = true;
+                            var matchingRelationship = this.FindMatchingCollectionRelationship(args.Producer);
+
+                            var additionalInformation = StringResources.CollectionUsedDuringConstruction(
+                                this.ImplementationType,
+                                args.Producer,
+                                matchingRelationship);
+
+                            // At this point, an injected ContainerControlledCollection<T> has notified the
+                            // listener about the creation of one of its elements. This has happened during
+                            // the construction of this (Singleton) instance, which might cause Lifestyle
+                            // Mismatches. That's why this is added as a known relationship. This way
+                            // diagnostics can verify the relationship.
+                            var relationship = new KnownRelationship(
+                                    implementationType: this.ImplementationType,
+                                    lifestyle: this.Lifestyle,
+                                    consumer: matchingRelationship?.Consumer ?? InjectionConsumerInfo.Root,
+                                    dependency: args.Producer);
+
+                            relationship.AddAdditionalInformation(
+                                DiagnosticType.LifestyleMismatch, additionalInformation);
+
+                            this.AddRelationship(relationship);
+                        }
+                    }
+                };
+            }
+
+            private KnownRelationship FindMatchingCollectionRelationship(
+                InstanceProducer collectionItemProducer) =>
+                this.FindMatchingControlledCollectionRelationship(collectionItemProducer)
+                ?? this.FindMatchingMutableCollectionRelationship(collectionItemProducer);
+
+            private KnownRelationship FindMatchingControlledCollectionRelationship(
+                InstanceProducer collectionItemProducer)
+            {
+                return (
+                    from relationship in this.GetRelationships()
+                    let producer = relationship.Dependency
+                    where producer.IsContainerControlledCollection()
+                    let controlledElementType = producer.GetContainerControlledCollectionElementType()
+                    where controlledElementType == collectionItemProducer.ServiceType
+                    select relationship)
+                    .FirstOrDefault();
+            }
+
+            private KnownRelationship FindMatchingMutableCollectionRelationship(
+                InstanceProducer collectionItemProducer)
+            {
+                return (
+                    from relationship in this.GetRelationships()
+                    let producer = relationship.Dependency
+                    let dependencyType = producer.ServiceType
+                    where typeof(List<>).IsGenericTypeDefinitionOf(dependencyType)
+                        || typeof(Collection<>).IsGenericTypeDefinitionOf(dependencyType)
+                        || dependencyType.IsArray
+                    let elementType = dependencyType.GetGenericArguments().FirstOrDefault()
+                        ?? dependencyType.GetElementType()
+                    where elementType == collectionItemProducer.ServiceType
+                    select relationship)
+                    .FirstOrDefault();
+            }
+
+            private Func<object> Compile(Expression expression)
             {
                 try
                 {
-                    // Don't call BuildTransientDelegate, because that might do optimizations that are simply
-                    // not needed, since the delegate will be called just once.
-                    return CompilationHelpers.CompileLambda<TImplementation>(expression);
+                    // Compile without optimizations, because they are not needed for Singletons.
+                    var lambda = expression as LambdaExpression ?? Expression.Lambda(expression);
+
+                    return (Func<object>)lambda.Compile();
                 }
                 catch (Exception ex)
                 {
                     string message = StringResources.ErrorWhileBuildingDelegateFromExpression(
-                        typeof(TImplementation), expression, ex);
+                        this.ImplementationType, expression, ex);
 
                     throw new ActivationException(message, ex);
-                }
-            }
-            
-            private static void EnsureInstanceIsNotNull(object instance)
-            {
-                if (instance == null)
-                {
-                    throw new ActivationException(
-                        StringResources.DelegateForTypeReturnedNull(typeof(TImplementation)));
                 }
             }
         }

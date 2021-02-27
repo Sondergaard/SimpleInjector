@@ -1,24 +1,5 @@
-﻿#region Copyright Simple Injector Contributors
-/* The Simple Injector is an easy-to-use Inversion of Control library for .NET
- * 
- * Copyright (c) 2015 Simple Injector Contributors
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and 
- * associated documentation files (the "Software"), to deal in the Software without restriction, including 
- * without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell 
- * copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the 
- * following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in all copies or substantial 
- * portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT 
- * LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO 
- * EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER 
- * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE 
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
-*/
-#endregion
+﻿// Copyright (c) Simple Injector Contributors. All rights reserved.
+// Licensed under the MIT License. See LICENSE file in the project root for license information.
 
 namespace SimpleInjector.Internals
 {
@@ -44,19 +25,20 @@ namespace SimpleInjector.Internals
 
             Type ServiceType { get; }
 
-            Type ImplementationType { get; }
+            Type? ImplementationType { get; }
 
             IEnumerable<InstanceProducer> CurrentProducers { get; }
 
             bool OverlapsWith(InstanceProducer producerToCheck);
 
-            InstanceProducer TryGetProducer(Type serviceType, InjectionConsumerInfo consumer,
-                bool handled = false);
+            InstanceProducer? TryGetProducer(
+                Type serviceType, InjectionConsumerInfo consumer, bool handled = false);
 
             bool MatchesServiceType(Type serviceType);
         }
 
-        public IEnumerable<InstanceProducer> CurrentProducers => this.providers.SelectMany(p => p.CurrentProducers);
+        public IEnumerable<InstanceProducer> CurrentProducers =>
+            this.providers.SelectMany(p => p.CurrentProducers);
 
         public void Add(InstanceProducer producer)
         {
@@ -73,8 +55,11 @@ namespace SimpleInjector.Internals
             this.providers.Add(new ClosedToInstanceProducerProvider(producer));
         }
 
-        public void AddGeneric(Type serviceType, Type implementationType,
-            Lifestyle lifestyle, Predicate<PredicateContext> predicate)
+        public void AddGeneric(
+            Type serviceType,
+            Type implementationType,
+            Lifestyle lifestyle,
+            Predicate<PredicateContext>? predicate)
         {
             this.container.ThrowWhenContainerIsLockedOrDisposed();
 
@@ -93,8 +78,11 @@ namespace SimpleInjector.Internals
             this.providers.Add(provider);
         }
 
-        public void Add(Type serviceType, Func<TypeFactoryContext, Type> implementationTypeFactory,
-            Lifestyle lifestyle, Predicate<PredicateContext> predicate)
+        public void Add(
+            Type serviceType,
+            Func<TypeFactoryContext, Type> implementationTypeFactory,
+            Lifestyle lifestyle,
+            Predicate<PredicateContext>? predicate)
         {
             this.container.ThrowWhenContainerIsLockedOrDisposed();
 
@@ -108,18 +96,25 @@ namespace SimpleInjector.Internals
             this.providers.Add(provider);
         }
 
-        public InstanceProducer TryGetInstanceProducer(Type closedGenericServiceType,
-            InjectionConsumerInfo context)
+        public InstanceProducer? TryGetInstanceProducer(
+            Type serviceType, InjectionConsumerInfo consumer)
         {
-            var producers = this.GetInstanceProducers(closedGenericServiceType, context).ToArray();
+            // Pre-condition: serviceType is always a closed-generic type
+            List<FoundInstanceProducer>? producers = this.GetInstanceProducers(serviceType, consumer);
 
-            if (producers.Length <= 1)
+            if (producers is null)
             {
-                return producers.Select(p => p.Item3).FirstOrDefault();
+                return null;
             }
-
-            throw new ActivationException(
-                StringResources.MultipleApplicableRegistrationsFound(closedGenericServiceType, producers));
+            else if (producers.Count == 1)
+            {
+                return producers[0].Producer;
+            }
+            else
+            {
+                throw new ActivationException(
+                    StringResources.MultipleApplicableRegistrationsFound(serviceType, producers));
+            }
         }
 
         public int GetNumberOfConditionalRegistrationsFor(Type serviceType) =>
@@ -146,10 +141,14 @@ namespace SimpleInjector.Internals
 
                     if (overlappingProvider.ServiceType.IsGenericTypeDefinition())
                     {
+                        // An overlapping provider will always have an ImplementationType, because providers
+                        // with a factory will never be overlapping.
+                        Type implementationType = overlappingProvider.ImplementationType!;
+
                         throw new InvalidOperationException(
                             StringResources.RegistrationForClosedServiceTypeOverlapsWithOpenGenericRegistration(
                                 producerToRegister.ServiceType,
-                                overlappingProvider.ImplementationType));
+                                implementationType));
                     }
 
                     bool eitherOneRegistrationIsConditional =
@@ -167,7 +166,9 @@ namespace SimpleInjector.Internals
 
         private void ThrowWhenConditionalIsRegisteredInOverridingMode(InstanceProducer producer)
         {
-            if (producer.IsConditional && this.container.Options.AllowOverridingRegistrations)
+            if (producer.IsConditional
+                && this.container.Options.AllowOverridingRegistrations
+                && this.providers.Any())
             {
                 throw new NotSupportedException(
                     StringResources.MakingConditionalRegistrationsInOverridingModeIsNotSupported());
@@ -177,21 +178,21 @@ namespace SimpleInjector.Internals
         private void ThrowWhenConditionalIsRegisteredInOverridingMode(
             OpenGenericToInstanceProducerProvider provider)
         {
-            if (!provider.AppliesToAllClosedServiceTypes && this.container.Options.AllowOverridingRegistrations)
+            if (!provider.AppliesToAllClosedServiceTypes
+                && this.container.Options.AllowOverridingRegistrations)
             {
-                // We allow the registration in case it doesn't have a predicate (meaning that the type is
-                // solely conditional by its generic type constraints) while it is the first registration.
-                // In that case there is no ambiguity, since there's nothing to replace (fixes #116).
-                if (provider.Predicate != null)
+                if (this.providers.Count > 0)
                 {
-                    throw new NotSupportedException(
-                        StringResources.MakingConditionalRegistrationsInOverridingModeIsNotSupported());
-                }
-
-                if (this.providers.Any())
-                {
-                    throw new NotSupportedException(
-                        StringResources.MakingRegistrationsWithTypeConstraintsInOverridingModeIsNotSupported());
+                    if (provider.Predicate != null)
+                    {
+                        throw new NotSupportedException(
+                            StringResources.MakingConditionalRegistrationsInOverridingModeIsNotSupported());
+                    }
+                    else
+                    {
+                        throw new NotSupportedException(
+                            StringResources.MakingRegistrationsWithTypeConstraintsInOverridingModeIsNotSupported());
+                    }
                 }
             }
         }
@@ -200,20 +201,24 @@ namespace SimpleInjector.Internals
             OpenGenericToInstanceProducerProvider providerToRegister)
         {
             bool providerToRegisterIsSuperset =
-                providerToRegister.AppliesToAllClosedServiceTypes && this.providers.Any();
+                providerToRegister.AppliesToAllClosedServiceTypes && this.providers.Count > 0;
 
-            bool isReplacement = providerToRegister.AppliesToAllClosedServiceTypes 
+            // A provider with AppliesToAllClosedServiceTypes true will always have an ImplementationType,
+            // because the property will always be false for providers with a factory.
+            Type providerImplementationType = providerToRegister.ImplementationType!;
+
+            bool isReplacement = providerToRegister.AppliesToAllClosedServiceTypes
                 && this.container.Options.AllowOverridingRegistrations;
 
             // A provider is a superset of the providerToRegister when it can be applied to ALL generic
             // types that the providerToRegister can be applied to as well.
-            var supersetProviders = this.GetSupersetProvidersFor(providerToRegister.ImplementationType);
+            var supersetProviders = this.GetSupersetProvidersFor(providerImplementationType);
 
             bool overlaps = providerToRegisterIsSuperset || supersetProviders.Any();
 
             if (!isReplacement && overlaps)
             {
-                var overlappingProvider = supersetProviders.FirstOrDefault() ?? this.providers.First();
+                var overlappingProvider = supersetProviders.FirstOrDefault() ?? this.providers[0];
 
                 throw GetAnOverlappingGenericRegistrationExistsException(
                     providerToRegister,
@@ -230,29 +235,23 @@ namespace SimpleInjector.Internals
             select provider;
 
         private static InvalidOperationException GetAnOverlappingGenericRegistrationExistsException(
-            InstanceProducer providerToRegister, IProducerProvider overlappingProvider) =>
-            new InvalidOperationException(
-                StringResources.AnOverlappingRegistrationExists(
-                    providerToRegister.ServiceType,
-                    overlappingProvider.ImplementationType,
-                    overlappingProvider.IsConditional,
-                    providerToRegister.ImplementationType,
-            providerToRegister.IsConditional));
-
-        private static InvalidOperationException GetAnOverlappingGenericRegistrationExistsException(
             IProducerProvider providerToRegister, IProducerProvider overlappingProvider) =>
             new InvalidOperationException(
                 StringResources.AnOverlappingRegistrationExists(
                     providerToRegister.ServiceType,
-                    overlappingProvider.ImplementationType,
+                    // ImplementationType will never be null, because providers can never be overlapping when they
+                    // have a factory instead of an implementation type.
+                    overlappingProvider.ImplementationType!,
                     overlappingProvider.IsConditional,
-                    providerToRegister.ImplementationType,
+                    providerToRegister.ImplementationType!,
                     providerToRegister.IsConditional));
 
-        private IEnumerable<Tuple<Type, Type, InstanceProducer>> GetInstanceProducers(
+        private List<FoundInstanceProducer>? GetInstanceProducers(
             Type closedGenericServiceType, InjectionConsumerInfo consumer)
         {
             bool handled = false;
+
+            List<FoundInstanceProducer>? list = null;
 
             foreach (var provider in this.providers)
             {
@@ -261,14 +260,21 @@ namespace SimpleInjector.Internals
 
                 if (producer != null)
                 {
-                    yield return Tuple.Create(
-                        item1: provider.ServiceType,
-                        item2: provider.ImplementationType ?? producer.ImplementationType,
-                        item3: producer);
+                    if (list is null)
+                    {
+                        list = new List<FoundInstanceProducer>(capacity: 1);
+                    }
+
+                    list.Add(new FoundInstanceProducer(
+                        provider.ServiceType,
+                        provider.ImplementationType ?? producer.FinalImplementationType,
+                        producer));
 
                     handled = true;
                 }
             }
+
+            return list;
         }
 
         private sealed class ClosedToInstanceProducerProvider : IProducerProvider
@@ -283,16 +289,16 @@ namespace SimpleInjector.Internals
             public bool IsConditional => this.producer.IsConditional;
             public bool AppliesToAllClosedServiceTypes => false;
             public Type ServiceType => this.producer.ServiceType;
-            public Type ImplementationType => this.producer.Registration.ImplementationType;
+            public Type? ImplementationType => this.producer.Registration.ImplementationType;
             public IEnumerable<InstanceProducer> CurrentProducers => Enumerable.Repeat(this.producer, 1);
             public bool MatchesServiceType(Type serviceType) => serviceType == this.producer.ServiceType;
 
             public bool OverlapsWith(InstanceProducer producerToCheck) =>
-                (this.producer.IsUnconditional || producerToCheck.IsUnconditional) &&
-                this.producer.ServiceType == producerToCheck.ServiceType;
+                (this.producer.IsUnconditional || producerToCheck.IsUnconditional)
+                && this.producer.ServiceType == producerToCheck.ServiceType;
 
-            public InstanceProducer TryGetProducer(Type serviceType, InjectionConsumerInfo consumer,
-                bool handled) =>
+            public InstanceProducer? TryGetProducer(
+                Type serviceType, InjectionConsumerInfo consumer, bool handled) =>
                 this.MatchesServiceType(serviceType) && this.MatchesPredicate(consumer, handled)
                     ? this.producer
                     : null;
@@ -303,44 +309,55 @@ namespace SimpleInjector.Internals
 
         private sealed class OpenGenericToInstanceProducerProvider : IProducerProvider
         {
-            internal readonly Predicate<PredicateContext> Predicate;
+            internal readonly Predicate<PredicateContext>? Predicate;
+
+            private readonly Dictionary<object, InstanceProducer> cache =
+                new Dictionary<object, InstanceProducer>();
+            private readonly Dictionary<Type, Registration> registrationCache =
+                new Dictionary<Type, Registration>();
 
             private readonly Lifestyle lifestyle;
             private readonly Container container;
 
-            private readonly Dictionary<object, InstanceProducer> cache = new Dictionary<object, InstanceProducer>();
-            private readonly Dictionary<Type, Registration> registrationCache = new Dictionary<Type, Registration>();
-
-            internal OpenGenericToInstanceProducerProvider(Type serviceType, Type implementationType,
-                Lifestyle lifestyle, Predicate<PredicateContext> predicate, Container container)
+            internal OpenGenericToInstanceProducerProvider(
+                Type serviceType,
+                Type implementationType,
+                Lifestyle lifestyle,
+                Predicate<PredicateContext>? predicate,
+                Container container)
             {
                 this.ServiceType = serviceType;
                 this.ImplementationType = implementationType;
-                this.ImplementationTypeFactory = c => this.ImplementationType;
+                this.ImplementationTypeFactory = _ => implementationType;
                 this.lifestyle = lifestyle;
                 this.Predicate = predicate;
                 this.container = container;
 
                 // We cache the result of this method, because this is a really heavy operation.
                 // Not caching it can dramatically influence the performance of the registration process.
-                this.AppliesToAllClosedServiceTypes = this.RegistrationAppliesToAllClosedServiceTypes();
+                this.AppliesToAllClosedServiceTypes =
+                    this.RegistrationAppliesToAllClosedServiceTypes(implementationType);
             }
 
-            internal OpenGenericToInstanceProducerProvider(Type serviceType,
-                Func<TypeFactoryContext, Type> implementationTypeFactory, Lifestyle lifestyle,
-                Predicate<PredicateContext> predicate, Container container)
+            internal OpenGenericToInstanceProducerProvider(
+                Type serviceType,
+                Func<TypeFactoryContext, Type> implementationTypeFactory,
+                Lifestyle lifestyle,
+                Predicate<PredicateContext>? predicate,
+                Container container)
             {
                 this.ServiceType = serviceType;
                 this.ImplementationTypeFactory = implementationTypeFactory;
                 this.lifestyle = lifestyle;
                 this.Predicate = predicate;
                 this.container = container;
+                this.AppliesToAllClosedServiceTypes = false;
             }
 
             public bool IsConditional => this.Predicate != null;
             public bool AppliesToAllClosedServiceTypes { get; }
             public Type ServiceType { get; }
-            public Type ImplementationType { get; }
+            public Type? ImplementationType { get; }
             public Func<TypeFactoryContext, Type> ImplementationTypeFactory { get; }
 
             public IEnumerable<InstanceProducer> CurrentProducers
@@ -355,30 +372,34 @@ namespace SimpleInjector.Internals
             }
 
             public bool OverlapsWith(InstanceProducer producerToCheck) =>
-                this.IsConditional || this.ImplementationType == null
+                this.IsConditional || this.ImplementationType is null
                     ? false // Conditionals never overlap compile time.
                     : GenericTypeBuilder.IsImplementationApplicableToEveryGenericType(
                         producerToCheck.ServiceType,
                         this.ImplementationType);
 
-            public InstanceProducer TryGetProducer(Type serviceType, InjectionConsumerInfo consumer,
-                bool handled)
+            public InstanceProducer? TryGetProducer(
+                Type serviceType, InjectionConsumerInfo consumer, bool handled)
             {
-                Type closedImplementation = this.ImplementationType != null
+                Type? closedImplementation = this.ImplementationType != null
                     ? GenericTypeBuilder.MakeClosedImplementation(serviceType, this.ImplementationType)
                     : null;
 
-                Func<Type> implementationTypeProvider = () => this.ImplementationType != null
+                // This Func<Type> factory will return null when a closed implementation can't be built:
+                // * from ImplementationType due to type constraints
+                // * from the implementation returned from ImplementationTypeFactory due to type constraints,
+                //   as it can return partly closed types.
+                Type? GetImplementationType() => this.ImplementationType != null
                     ? closedImplementation
                     : this.GetImplementationTypeThroughFactory(serviceType, consumer);
 
-                var context = new PredicateContext(serviceType, implementationTypeProvider, consumer, handled);
+                var context = new PredicateContext(serviceType, GetImplementationType, consumer, handled);
 
                 // NOTE: The producer should only get built after it matches the delegate, to prevent
-                // unneeded producers from being created, because this might cause diagnostic warnings, 
+                // unneeded producers from being created, because this might cause diagnostic warnings,
                 // such as torn lifestyle warnings.
                 var shouldBuildProducer =
-                    (this.ImplementationType == null || closedImplementation != null)
+                    (this.ImplementationType is null || closedImplementation != null)
                     && this.MatchesPredicate(context)
                     && context.ImplementationType != null;
 
@@ -388,15 +409,15 @@ namespace SimpleInjector.Internals
             // In case this is a type factory registration (meaning ImplementationType is null) we consider
             // the service to be matching, since we can't (and should not) invoke the factory.
             public bool MatchesServiceType(Type serviceType) =>
-                this.ImplementationType == null 
+                this.ImplementationType is null
                 || GenericTypeBuilder.MakeClosedImplementation(serviceType, this.ImplementationType) != null;
 
-            private Type GetImplementationTypeThroughFactory(Type serviceType, InjectionConsumerInfo consumer)
+            private Type? GetImplementationTypeThroughFactory(Type serviceType, InjectionConsumerInfo consumer)
             {
-                Type implementationType =
+                Type? implementationType =
                     this.ImplementationTypeFactory(new TypeFactoryContext(serviceType, consumer));
 
-                if (implementationType == null)
+                if (implementationType is null)
                 {
                     throw new InvalidOperationException(StringResources.FactoryReturnedNull(this.ServiceType));
                 }
@@ -406,7 +427,7 @@ namespace SimpleInjector.Internals
                     Requires.TypeFactoryReturnedTypeThatDoesNotContainUnresolvableTypeArguments(
                         serviceType, implementationType);
 
-                    // implementationType == null when type constraints don't match.
+                    // implementationType is null when type constraints don't match.
                     implementationType =
                         GenericTypeBuilder.MakeClosedImplementation(serviceType, implementationType);
                 }
@@ -445,41 +466,40 @@ namespace SimpleInjector.Internals
 
             private Registration GetRegistration(PredicateContext context)
             {
-                Type key = context.ImplementationType;
-
-                Registration registration;
+                // At this stage, we know that ImplementationType is not null.
+                Type key = context.ImplementationType!;
 
                 // Never build a registration for a particular implementation type twice. This would break
                 // the promise of returning singletons.
-                if (!this.registrationCache.TryGetValue(key, out registration))
+                if (!this.registrationCache.TryGetValue(key, out Registration registration))
                 {
-                    this.registrationCache[key] = registration = this.CreateNewRegistrationFor(context);
+                    this.registrationCache[key] = registration = this.CreateNewRegistrationFor(key);
                 }
 
                 return registration;
             }
 
-            private Registration CreateNewRegistrationFor(PredicateContext context) =>
-                this.lifestyle.CreateRegistration(context.ImplementationType, this.container);
+            private Registration CreateNewRegistrationFor(Type concreteType) =>
+                this.lifestyle.CreateRegistration(concreteType, this.container);
 
             private bool MatchesPredicate(PredicateContext context) =>
-                this.Predicate != null ? this.Predicate(context) : true;
+                this.Predicate == null || this.Predicate(context);
 
             // This is nice, if we pass the open generic service type to the GenericTypeBuilder, it
             // can check for us whether the implementation adds extra type constraints that the service
             // type doesn't have. This works, because if it doesn't add any type constraints, it will be
             // able to construct a new open service type, based on the generic type arguments of the
             // implementation. If it can't, it means that the implementionType applies to a subset.
-            private bool RegistrationAppliesToAllClosedServiceTypes() => 
-                this.Predicate == null
-                && this.ImplementationType.IsGenericType()
-                && !this.ImplementationType.IsPartiallyClosed()
-                && this.IsImplementationApplicableToEveryGenericType();
+            private bool RegistrationAppliesToAllClosedServiceTypes(Type implementationType) =>
+                this.Predicate is null
+                && implementationType.IsGenericType()
+                && !implementationType.IsPartiallyClosed()
+                && this.IsImplementationApplicableToEveryGenericType(implementationType);
 
-            private bool IsImplementationApplicableToEveryGenericType() =>
+            private bool IsImplementationApplicableToEveryGenericType(Type implementationType) =>
                 GenericTypeBuilder.IsImplementationApplicableToEveryGenericType(
                     this.ServiceType,
-                    this.ImplementationType);
+                    implementationType);
         }
     }
 }

@@ -255,7 +255,7 @@
 
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<ArgumentException>(
-                "The supplied type Int32 is not a reference type. Only reference types are supported.",
+                "The supplied type int is not a reference type. Only reference types are supported.",
                 action);
         }
 
@@ -293,6 +293,20 @@
             AssertThat.ThrowsWithParamName("serviceType", action);
         }
 
+        // #859
+        // Due to a design flaw in v5.0.0, this caused the new overload on SingletonLifestyle to be called.
+        [TestMethod]
+        public void Lifestyle_Singleton_CreateRegistration_CalledWithFuncObjectInstanceCreator_Succeeds()
+        {
+            // Arrange
+            Container container = new Container();
+
+            Func<object> instanceCreator = () => new NullLogger();
+
+            // Act
+            Lifestyle.Singleton.CreateRegistration(typeof(ILogger), instanceCreator, container);
+        }
+
         private sealed class FakeLifestyle : Lifestyle
         {
             public FakeLifestyle(string name)
@@ -305,13 +319,14 @@
                 get { throw new NotImplementedException(); }
             }
 
-            protected internal override Registration CreateRegistrationCore<TConcrete>(Container container)
+            protected internal override Registration CreateRegistrationCore(
+                Type concreteType, Container container)
             {
                 throw new NotImplementedException();
             }
 
-            protected internal override Registration CreateRegistrationCore<TService>(Func<TService> instanceCreator,
-                Container container)
+            protected internal override Registration CreateRegistrationCore<TService>(
+                Func<TService> instanceCreator, Container container)
             {
                 throw new NotImplementedException();
             }

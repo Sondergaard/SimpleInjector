@@ -1,24 +1,5 @@
-﻿#region Copyright Simple Injector Contributors
-/* The Simple Injector is an easy-to-use Inversion of Control library for .NET
- * 
- * Copyright (c) 2013 Simple Injector Contributors
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and 
- * associated documentation files (the "Software"), to deal in the Software without restriction, including 
- * without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell 
- * copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the 
- * following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in all copies or substantial 
- * portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT 
- * LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO 
- * EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER 
- * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE 
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
-*/
-#endregion
+﻿// Copyright (c) Simple Injector Contributors. All rights reserved.
+// Licensed under the MIT License. See LICENSE file in the project root for license information.
 
 namespace SimpleInjector.Internals
 {
@@ -40,12 +21,14 @@ namespace SimpleInjector.Internals
             this.ConcreteType = concreteType;
         }
 
-        [SuppressMessage("Microsoft.Performance", "CA1811:AvoidUncalledPrivateCode",
+        [SuppressMessage(
+            "Microsoft.Performance",
+            "CA1811:AvoidUncalledPrivateCode",
             Justification = "This method is called by the debugger.")]
         [DebuggerBrowsable(DebuggerBrowsableState.Never)]
         internal string DebuggerDisplay =>
-            $"{nameof(Argument)}: {this.Argument.ToFriendlyName()}, " +
-            $"{nameof(ConcreteType)}: {this.ConcreteType.ToFriendlyName()}";
+            $"Argument: {this.Argument.ToFriendlyName()}, " +
+            $"ConcreteType: {this.ConcreteType.ToFriendlyName()}";
 
         [DebuggerDisplay("{Argument, nq}")]
         internal Type Argument { get; }
@@ -55,7 +38,7 @@ namespace SimpleInjector.Internals
 
         internal bool TypeConstraintsAreSatisfied => this.Validator.AreTypeConstraintsSatisfied();
 
-        private TypeConstraintValidator Validator => new TypeConstraintValidator { Mapping = this };
+        private TypeConstraintValidator Validator => new TypeConstraintValidator(this);
 
         /// <summary>Implements equality. Needed for doing LINQ distinct operations.</summary>
         /// <param name="other">The other to compare to.</param>
@@ -63,10 +46,12 @@ namespace SimpleInjector.Internals
         bool IEquatable<ArgumentMapping>.Equals(ArgumentMapping other) =>
             this.Argument == other.Argument && this.ConcreteType == other.ConcreteType;
 
-        /// <summary>Overrides the default hash code. Needed for doing LINQ distinct operations.</summary>
-        /// <returns>An 32 bit integer.</returns>
-        public override int GetHashCode() =>
-            this.Argument.GetHashCode() ^ this.ConcreteType.GetHashCode();
+        /// <inheritdoc />
+        public override int GetHashCode() => Helpers.Hash(this.Argument, this.ConcreteType);
+
+        /// <inheritdoc />
+        public override bool Equals(object obj) =>
+            obj is ArgumentMapping other && ((IEquatable<ArgumentMapping>)this).Equals(other);
 
         internal static ArgumentMapping Create(Type argument, Type concreteType) =>
             new ArgumentMapping(argument, concreteType);
@@ -80,20 +65,20 @@ namespace SimpleInjector.Internals
             {
                 return true;
             }
-
-            if (!this.ConcreteType.IsGenericType() || !this.Argument.IsGenericType())
+            else if (!this.ConcreteType.IsGenericType() || !this.Argument.IsGenericType())
             {
                 return false;
             }
-
-            if (this.ConcreteType.GetGenericTypeDefinition() != this.Argument.GetGenericTypeDefinition())
+            else if (this.ConcreteType.GetGenericTypeDefinition() != this.Argument.GetGenericTypeDefinition())
             {
                 return false;
             }
-
-            return this.Argument.GetGenericArguments()
-                .Zip(this.ConcreteType.GetGenericArguments(), ArgumentMapping.Create)
-                .All(mapping => mapping.ConcreteTypeMatchesPartialArgument());
+            else
+            {
+                return this.Argument.GetGenericArguments()
+                    .Zip(this.ConcreteType.GetGenericArguments(), Create)
+                    .All(mapping => mapping.ConcreteTypeMatchesPartialArgument());
+            }
         }
     }
 }

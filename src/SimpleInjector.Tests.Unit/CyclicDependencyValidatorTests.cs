@@ -3,6 +3,7 @@
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using System.Linq.Expressions;
     using System.Threading;
     using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -227,7 +228,7 @@
         public void GetInstance_DelegateRegistrationDependingIndirectlyOnItselfThroughRootType_Throws()
         {
             // Arrange
-            var container = new Container();
+            var container = ContainerFactory.New();
 
             // One depends on ITwo
             container.Register<One>();
@@ -453,11 +454,11 @@
             container.Register<INodeFactory, NodeFactory>();
 
             // Act
-            // Simple Injector's goal is to prevent stack overflow exceptions when building up object graphs. 
-            // Since the creation of the INode types are delayed since an IEnumerable<T> is injected into the 
-            // NodeFactory (note that injecting an IEnumerable<T> does trigger the creation of its 
+            // Simple Injector's goal is to prevent stack overflow exceptions when building up object graphs.
+            // Since the creation of the INode types are delayed since an IEnumerable<T> is injected into the
+            // NodeFactory (note that injecting an IEnumerable<T> does trigger the creation of its
             // instances; iterating the collection does), this can be revolved fine and there will be no
-            // stack overflow. It is therefore not Simple Injector's job to disallow such construct. Having the 
+            // stack overflow. It is therefore not Simple Injector's job to disallow such construct. Having the
             // circular reference in the code might be a problem, but the design might also be intentional and
             // could work just fine. Simple Injector should allow this.
             container.Verify();
@@ -512,8 +513,8 @@
 
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<ActivationException>(@"
-                   XDependingOn<ServiceDependingOn<IY>> 
-                -> ServiceDependingOn<IY> 
+                   XDependingOn<ServiceDependingOn<IY>>
+                -> ServiceDependingOn<IY>
                 -> YDependingOn<ServiceDependingOn<IX>>
                 -> ServiceDependingOn<IX>
                 -> XDependingOn<ServiceDependingOn<IY>>"
@@ -531,6 +532,7 @@
             container.Register<IX, CyclicX>();
             container.RegisterDecorator(typeof(IX), typeof(XDecorator1));
             container.Register<B>();
+            container.Register<A>();
 
             // Act
             Action action = () => container.GetInstance<A>();
@@ -545,17 +547,55 @@
         public void GetInstance_OnCyclicGraphWithCycleInDecorator_ShowsTheDecoratorInTheGraph()
         {
             // Arrange
-            var container = new Container();
+            var container = ContainerFactory.New();
 
+            // The registrations below result in the following cyclic graph
+            // ServiceDependingOn<A>(
+            //     dependency: new A(
+            //         b: new B(
+            //             x: CyclicXDecorator3(
+            //                 x: new NonCyclicX(),
+            //                 a: new A(...)))))
+            container.Register<ServiceDependingOn<A>>();
+            container.Register<A>();
+            container.Register<B>();
             container.Register<IX, NonCyclicX>();
             container.RegisterDecorator(typeof(IX), typeof(CyclicXDecorator3));
-            container.Register<B>();
 
             // Act
             Action action = () => container.GetInstance<ServiceDependingOn<A>>();
 
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<ActivationException>(
+                "The cyclic graph contains the following types: A -> B -> CyclicXDecorator3 -> A.",
+                action);
+        }
+
+        // #756
+        [TestMethod]
+        public void Verify_OnCyclicGraphWithCycleInDecorator_ShowsTheDecoratorInTheGraph()
+        {
+            // Arrange
+            var container = ContainerFactory.New();
+
+            // The registrations below result in the following cyclic graph
+            // ServiceDependingOn<A>(
+            //     dependency: new A(
+            //         b: new B(
+            //             x: CyclicXDecorator3(
+            //                 x: new NonCyclicX(),
+            //                 a: new A(...)))))
+            container.Register<ServiceDependingOn<A>>();
+            container.Register<A>();
+            container.Register<B>();
+            container.Register<IX, NonCyclicX>();
+            container.RegisterDecorator(typeof(IX), typeof(CyclicXDecorator3));
+
+            // Act
+            Action action = () => container.Verify();
+
+            // Assert
+            AssertThat.ThrowsWithExceptionMessageContains<InvalidOperationException>(
                 "The cyclic graph contains the following types: A -> B -> CyclicXDecorator3 -> A.",
                 action);
         }
@@ -722,12 +762,12 @@
     }
 
     public class A { public A(B b) { } }
-    public class B { public B(IX c) { } }
+    public class B { public B(IX x) { } }
     public class NonCyclicX : IX { }
-    public class CyclicX : IX { public CyclicX(IX c) { } } // Depending on itself
-    public class XDecorator1 : IX { public XDecorator1(IX d) { } }
-    public class XDecorator2 : IX { public XDecorator2(IX d) { } }
-    public class CyclicXDecorator3 : IX { public CyclicXDecorator3(IX d, A a) { } }
+    public class CyclicX : IX { public CyclicX(IX x) { } } // Depending on itself
+    public class XDecorator1 : IX { public XDecorator1(IX x) { } }
+    public class XDecorator2 : IX { public XDecorator2(IX x) { } }
+    public class CyclicXDecorator3 : IX { public CyclicXDecorator3(IX x, A a) { } }
 
     public class ServiceDependingOn<TDependency>
     {

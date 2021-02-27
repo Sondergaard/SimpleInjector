@@ -134,7 +134,7 @@
             Exception lastThrownException = new Exception();
 
             var disposables = new List<DisposableObject>
-            { 
+            {
                 // Since the objects are disposed in reverse order, the first object is disposed last, and
                 // this exception is expected to bubble up.
                 new DisposableObject(exceptionToThrow: lastThrownException),
@@ -242,7 +242,7 @@
 
             var scope = new Scope(new Container());
 
-            var container = new Container();
+            var container = ContainerFactory.New();
 
             container.Register<DisposableObject>(() => disposable, new FakeScopedLifestyle(scope));
 
@@ -415,7 +415,7 @@
             // Arrange
             bool newlyResolvedInstanceDisposed = false;
 
-            var container = new Container();
+            var container = ContainerFactory.New();
 
             var scope = new Scope(container);
 
@@ -516,8 +516,8 @@
 
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<ActivationException>(@"
-                The registered delegate for type IPlugin threw an exception. A recursive registration of 
-                Action or IDisposable instances was detected during disposal of the scope. 
+                The registered delegate for type IPlugin threw an exception. A recursive registration of
+                Action or IDisposable instances was detected during disposal of the scope.
                 This is possibly caused by a component that is directly or indirectly depending on itself"
                 .TrimInside(),
                 action);
@@ -550,8 +550,8 @@
 
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<ActivationException>(@"
-                The registered delegate for type IPlugin threw an exception. A recursive registration of 
-                Action or IDisposable instances was detected during disposal of the scope. 
+                The registered delegate for type IPlugin threw an exception. A recursive registration of
+                Action or IDisposable instances was detected during disposal of the scope.
                 This is possibly caused by a component that is directly or indirectly depending on itself"
                 .TrimInside(),
                 action);
@@ -737,6 +737,7 @@
             DisposablePlugin plugin = null;
 
             var container = new Container();
+            container.Options.EnableAutoVerification = false;
 
             var scopedLifestyle = new FakeScopedLifestyle(new Scope(container));
 
@@ -967,54 +968,6 @@
 
             // Assert
             Assert.AreSame(activeScope, resolvedScope);
-        }
-
-        [TestMethod]
-        public void GetInstance_ResolvingScopedDependencyDirectlyFromScope_ResolvesTheInstanceAsScoped()
-        {
-            // Arrange
-            var container = ContainerFactory.New();
-
-            // We need a 'dummy' scoped lifestyle to be able to use Lifestyle.Scoped
-            container.Options.DefaultScopedLifestyle = ScopedLifestyle.Flowing;
-
-            container.Register<ILogger, NullLogger>(Lifestyle.Scoped);
-
-            var scope1 = new Scope(container);
-            var scope2 = new Scope(container);
-
-            // Act
-            var s1 = scope1.GetInstance<ServiceDependingOn<ILogger>>();
-            var s2 = scope1.GetInstance<ServiceDependingOn<ILogger>>();
-            var s3 = scope2.GetInstance<ServiceDependingOn<ILogger>>();
-
-            // Assert
-            Assert.AreSame(s1.Dependency, s2.Dependency, "Logger was expected to be scoped but was transient.");
-            Assert.AreNotSame(s3.Dependency, s2.Dependency, "Logger was expected to be scoped but was singleton.");
-        }
-
-        [TestMethod]
-        public void GetInstance_LambdaThatCallsBackIntoContainerExecutedFromScopeResolve_ResolvesTheInstanceAsScoped()
-        {
-            // Arrange
-            var container = ContainerFactory.New();
-
-            container.Options.DefaultScopedLifestyle = ScopedLifestyle.Flowing;
-
-            // Calling back into the container to get a scoped instance, from within an instanceCreator lambda,
-            // should work, in case the the root object is resolved from a scope.
-            container.Register<ILogger>(() => container.GetInstance<NullLogger>());
-            container.Register<NullLogger>(Lifestyle.Scoped);
-            container.Register<ServiceDependingOn<ILogger>>();
-
-            var scope = new Scope(container);
-
-            // Act
-            var s1 = scope.GetInstance<ServiceDependingOn<ILogger>>();
-            var s2 = scope.GetInstance<ServiceDependingOn<ILogger>>();
-
-            // Assert
-            Assert.AreSame(s1.Dependency, s2.Dependency, "Logger was expected to be scoped.");
         }
 
         [TestMethod]

@@ -4,6 +4,7 @@
     using System.Linq;
     using System.Reflection;
     using Microsoft.VisualStudio.TestTools.UnitTesting;
+    using SimpleInjector;
     using SimpleInjector.Advanced;
 
     [TestClass]
@@ -19,7 +20,7 @@
             Action action = () => behavior.GetInstanceProducer(null, false);
 
             // Assert
-            AssertThat.ThrowsWithParamName<ArgumentNullException>("consumer", action);
+            AssertThat.ThrowsWithParamName<ArgumentNullException>("dependency", action);
         }
 
         [TestMethod]
@@ -50,7 +51,7 @@
         {
             // Arrange
             string expectedString = string.Format(@"
-                The constructor of type {0}.{1} contains parameter 'intArgument' of type Int32, which can not 
+                The constructor of type {0}.{1} contains parameter 'intArgument' of type int, which can not
                 be used for constructor injection because it is a value type.",
                 this.GetType().Name,
                 typeof(TypeWithSinglePublicConstructorWithValueTypeParameter).Name)
@@ -82,7 +83,7 @@
         {
             // Arrange
             string expectedString = string.Format(@"
-                The constructor of type {0}.{1} contains parameter 'stringArgument' of type String, which can 
+                The constructor of type {0}.{1} contains parameter 'stringArgument' of type string, which can
                 not be used for constructor injection.",
                 this.GetType().Name,
                 typeof(TypeWithSinglePublicConstructorWithStringTypeParameter).Name)
@@ -129,10 +130,13 @@
         {
             public InstanceProducer ProducerToReturn { get; set; }
 
-            public InstanceProducer GetInstanceProducer(InjectionConsumerInfo c, bool f) => this.ProducerToReturn;
+            public InstanceProducer GetInstanceProducer(InjectionConsumerInfo d, bool t) =>
+                this.ProducerToReturn;
 
-            public void Verify(InjectionConsumerInfo consumer)
+            public bool VerifyDependency(InjectionConsumerInfo dependency, out string errorMessage)
             {
+                errorMessage = null;
+                return true;
             }
         }
     }

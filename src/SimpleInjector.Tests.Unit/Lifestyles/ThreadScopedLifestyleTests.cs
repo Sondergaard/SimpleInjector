@@ -52,6 +52,8 @@
             // Arrange
             var container = new Container();
 
+            container.Register<ConcreteCommand>();
+
             // Act
             using (var scope = ThreadScopedLifestyle.BeginScope(container))
             {
@@ -141,7 +143,7 @@
             catch (ActivationException ex)
             {
                 AssertThat.ExceptionMessageContains(@"
-                    ConcreteCommand is registered as 'Thread Scoped' lifestyle, but the instance is 
+                    ConcreteCommand is registered using the 'Thread Scoped' lifestyle, but the instance is
                     requested outside the context of an active (Thread Scoped) scope."
                     .TrimInside(),
                     ex);
@@ -258,9 +260,10 @@
         {
             // Arrange
             var container = new Container();
+            container.Options.EnableAutoVerification = false;
 
             // Transient
-            container.Register<ICommand, DisposableCommand>();
+            container.Register<DisposableCommand>();
 
             DisposableCommand command;
 
@@ -281,11 +284,12 @@
         {
             // Arrange
             var container = new Container();
+            container.Options.EnableAutoVerification = false;
 
             var lifestyle = new ThreadScopedLifestyle();
 
             // Transient
-            container.Register<ICommand, DisposableCommand>();
+            container.Register<DisposableCommand>();
 
             container.RegisterInitializer<DisposableCommand>(instance =>
             {
@@ -310,15 +314,35 @@
         }
 
         [TestMethod]
-        public void RegisterForDisposal_WithNullArgument_ThrowsExpectedException()
+        public void RegisterIDisposableForDisposal_WithNullArgument_ThrowsExpectedException()
         {
             // Arrange
             var container = new Container();
 
+            IDisposable invalidArgument = null;
+
             using (var scope = ThreadScopedLifestyle.BeginScope(container))
             {
                 // Act
-                Action action = () => scope.RegisterForDisposal(null);
+                Action action = () => scope.RegisterForDisposal(invalidArgument);
+
+                // Assert
+                AssertThat.Throws<ArgumentNullException>(action);
+            }
+        }
+
+        [TestMethod]
+        public void RegisterIAsyncDisposableForDisposal_WithNullArgument_ThrowsExpectedException()
+        {
+            // Arrange
+            var container = new Container();
+
+            IAsyncDisposable invalidArgument = null;
+
+            using (var scope = ThreadScopedLifestyle.BeginScope(container))
+            {
+                // Act
+                Action action = () => scope.RegisterForDisposal(invalidArgument);
 
                 // Assert
                 AssertThat.Throws<ArgumentNullException>(action);
@@ -370,8 +394,6 @@
             var container = new Container();
 
             container.Register<DisposableCommand>(Lifestyle.Singleton);
-
-            container.Register<ICommand, DisposableCommand>(new ThreadScopedLifestyle());
 
             DisposableCommand singleton;
 
@@ -491,7 +513,7 @@
             var container = new Container();
 
             // This locks the container.
-            container.GetInstance<ConcreteCommand>();
+            container.GetInstance<Container>();
 
             try
             {
@@ -586,6 +608,9 @@
             DisposableCommand transientInstanceToDispose = null;
 
             var container = new Container();
+            container.Options.EnableAutoVerification = false;
+
+            container.Register<DisposableCommand>();
 
             var lifestyle = new ThreadScopedLifestyle();
 
@@ -670,14 +695,14 @@
 
             var actualOrderOfDisposal = new List<Type>();
 
-            var container = new Container();
+            var container = ContainerFactory.New();
             container.Options.DefaultScopedLifestyle = new ThreadScopedLifestyle();
 
             // Outer, Middle and Inner all depend on Func<object> and call it when disposed.
             // This way we can check in which order the instances are disposed.
             container.RegisterInstance<Action<object>>(instance => actualOrderOfDisposal.Add(instance.GetType()));
 
-            // Outer depends on Middle that depends on Inner. 
+            // Outer depends on Middle that depends on Inner.
             // Registration is deliberately made in a different order to prevent that the order of
             // registration might influence the order of disposing.
             container.Register<Middle>(Lifestyle.Scoped);
@@ -721,17 +746,17 @@
 
             var actualOrderOfDisposal = new List<Type>();
 
-            var container = new Container();
+            var container = ContainerFactory.New();
             container.Options.DefaultScopedLifestyle = new ThreadScopedLifestyle();
 
-            // Allow PropertyDependency to be injected as property on Inner 
+            // Allow PropertyDependency to be injected as property on Inner
             container.Options.PropertySelectionBehavior = new InjectProperties<ImportAttribute>();
 
             // PropertyDependency, Middle and Inner all depend on Func<object> and call it when disposed.
             // This way we can check in which order the instances are disposed.
             container.RegisterInstance<Action<object>>(instance => actualOrderOfDisposal.Add(instance.GetType()));
 
-            // Middle depends on Inner that depends on property PropertyDependency. 
+            // Middle depends on Inner that depends on property PropertyDependency.
             // Registration is deliberately made in a different order to prevent that the order of
             // registration might influence the order of disposing.
             container.Register<PropertyDependency>(Lifestyle.Scoped);

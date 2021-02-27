@@ -5,8 +5,9 @@ namespace SimpleInjector.Tests.Unit
     using System.Collections.Generic;
     using System.Linq;
     using System.Threading;
+    using System.Threading.Tasks;
     using Microsoft.VisualStudio.TestTools.UnitTesting;
-    using SimpleInjector.Advanced;
+    using SimpleInjector.Lifestyles;
 
     [TestClass]
     public class VerifyTests
@@ -44,7 +45,7 @@ namespace SimpleInjector.Tests.Unit
             // Arrange
             var container = ContainerFactory.New();
 
-            container.RegisterSingleton<IUserRepository>(new SqlUserRepository());
+            container.RegisterInstance<IUserRepository>(new SqlUserRepository());
 
             container.Verify();
 
@@ -75,7 +76,7 @@ namespace SimpleInjector.Tests.Unit
             // Arrange
             var container = ContainerFactory.New();
 
-            container.RegisterSingleton<IUserRepository>(new SqlUserRepository());
+            container.RegisterInstance<IUserRepository>(new SqlUserRepository());
 
             container.GetInstance<IUserRepository>();
 
@@ -297,7 +298,9 @@ namespace SimpleInjector.Tests.Unit
         public void Verify_RegisterCollectionCalledWithUnregisteredType_ThrowsExpectedException()
         {
             // Arrange
-            string expectedException = "No registration for type IUserRepository could be found.";
+            string expectedException =
+                "The registration for the collection of IUserRepository (i.e. IEnumerable<IUserRepository>) " +
+                "is supplied with the abstract type IUserRepository, which hasn't been registered explicitly";
 
             var container = ContainerFactory.New();
 
@@ -305,19 +308,80 @@ namespace SimpleInjector.Tests.Unit
 
             container.Collection.Register<IUserRepository>(types);
 
-            try
-            {
-                // Act
-                container.Verify();
+            // Act
+            Action action = () => container.Verify();
 
-                Assert.Fail("Exception expected.");
-            }
-            catch (InvalidOperationException ex)
-            {
-                string actualMessage = ex.Message;
+            // Assert
+            AssertThat.ThrowsWithExceptionMessageContains<InvalidOperationException>(
+                expectedException, action);
+        }
 
-                AssertThat.StringContains(expectedException, actualMessage, "Info:\n" + ex.ToString());
-            }
+        // See issue #690.
+        [TestMethod]
+        public void Verify_CollectionRegistrationPointingToAnUnregisteredAbstractType_ThrowsExpectedException()
+        {
+            // Arrange
+            var container = ContainerFactory.New();
+
+            // Register IPlugin as part of the collection, while omitting container.Register<IPlugin>
+            container.Collection.Register<IPlugin>(typeof(PluginBase));
+
+            // Act
+            Action action = () => container.Verify();
+
+            // Assert
+            AssertThat.ThrowsWithExceptionMessageContains<InvalidOperationException>(@"
+                The registration for the collection of IPlugin (i.e. IEnumerable<IPlugin>) is supplied with
+                the abstract type PluginBase, which hasn't been registered explicitly, and wasn't resolved
+                using unregistered type resolution. For Simple Injector to be able to resolve this collection,
+                an explicit one-to-one registration is required, e.g. Container.Register<PluginBase, MyImpl>().
+                Otherwise, in case PluginBase was supplied by accident, make sure it is removed."
+                .TrimInside(),
+                action);
+        }
+
+        // See issue #690.
+        [TestMethod]
+        public void Verify_CollectionRegistrationPointingToItsAbstraction_ThrowsExpectedException()
+        {
+            // Arrange
+            var container = ContainerFactory.New();
+
+            // Register IPlugin as part of the collection, while omitting container.Register<IPlugin>
+            container.Collection.Register<IPlugin>(typeof(IPlugin));
+
+            // Act
+            Action action = () => container.Verify();
+
+            // Assert
+            AssertThat.ThrowsWithExceptionMessageContains<InvalidOperationException>(@"
+                The registration for the collection of IPlugin (i.e. IEnumerable<IPlugin>) is supplied with
+                the abstract type IPlugin, which hasn't been registered explicitly"
+                .TrimInside(),
+                action);
+        }
+
+        // See issue #690.
+        [TestMethod]
+        public void Verify_GenericCollectionRegistrationPointingToItsAbstraction_ThrowsExpectedException()
+        {
+            // Arrange
+            var container = ContainerFactory.New();
+
+            var types = new[] { typeof(IEventHandler<>), typeof(AuditableEventEventHandler) };
+
+            container.Collection.Register(typeof(IEventHandler<>), types);
+
+            // Act
+            Action action = () => container.Verify();
+
+            // Assert
+            AssertThat.ThrowsWithExceptionMessageContains<InvalidOperationException>(@"
+                The registration for the collection of IEventHandler<AuditableEvent>
+                (i.e. IEnumerable<IEventHandler<AuditableEvent>>) is supplied with the abstract type
+                IEventHandler<TEvent>, which hasn't been registered explicitly"
+                .TrimInside(),
+                action);
         }
 
         [TestMethod]
@@ -333,7 +397,8 @@ namespace SimpleInjector.Tests.Unit
 
             container.Collection.Register<IPlugin>(new[] { typeof(PluginImpl) });
 
-            container.RegisterInitializer<PluginImpl>(plugin => actualNumberOfCreatedPlugins++);
+            container.RegisterInitializer<PluginImpl>(
+                plugin => actualNumberOfCreatedPlugins++);
 
             // Act
             container.Verify();
@@ -343,10 +408,46 @@ namespace SimpleInjector.Tests.Unit
         }
 
         [TestMethod]
-        public void Verify_CollectionWithDecoratorThatCanNotBeCreatedAtRuntime_ThrowsInvalidOperationException()
+        public void Verify_MixedOneToOneAndCollectionRegistrationForSameComponent_Succeeds()
         {
             // Arrange
             var container = ContainerFactory.New();
+
+            container.Register<PluginImpl>();
+
+            container.Collection.Register<IPlugin>(new[] { typeof(PluginImpl) });
+
+            // Act
+            container.Verify();
+        }
+
+        [TestMethod]
+        public void Verify_RootTypeCollectionWithDecoratorThatCanNotBeCreatedAtRuntime_ThrowsInvalidOperationException()
+        {
+            // Arrange
+            var container = ContainerFactory.New();
+
+            // Root type
+            container.Collection.Register<IPlugin>(new[] { typeof(PluginImpl) });
+
+            // FailingConstructorDecorator constructor throws an exception.
+            container.RegisterDecorator(typeof(IPlugin), typeof(FailingConstructorPluginDecorator));
+
+            // Act
+            Action action = () => container.Verify();
+
+            // Assert
+            AssertThat.Throws<InvalidOperationException>(action);
+        }
+
+        [TestMethod]
+        public void Verify_NonRootTypeCollectionWithDecoratorThatCanNotBeCreatedAtRuntime_ThrowsInvalidOperationException()
+        {
+            // Arrange
+            var container = ContainerFactory.New();
+
+            // Root type
+            container.Register<ServiceDependingOn<IEnumerable<IPlugin>>>();
 
             container.Collection.Register<IPlugin>(new[] { typeof(PluginImpl) });
 
@@ -376,7 +477,7 @@ namespace SimpleInjector.Tests.Unit
             Action action = () => container.Verify();
 
             // Assert
-            // This test verifies a bug: Calling InstanceProducer.BuildExpression flagged the producer to be 
+            // This test verifies a bug: Calling InstanceProducer.BuildExpression flagged the producer to be
             // skipped when calling Verify() while it was still possible that creating the instance would fail.
             AssertThat.Throws<InvalidOperationException>(action,
                 "The call to BuildExpression should not trigger the verification of IPlugin to be skipped.");
@@ -406,6 +507,7 @@ namespace SimpleInjector.Tests.Unit
         {
             // Arrange
             var container = new Container();
+            container.Options.ResolveUnregisteredConcreteTypes = true;
 
             container.Register<IPlugin>(() => container.GetInstance<PluginWithCreationCounter>(), Lifestyle.Singleton);
 
@@ -420,7 +522,8 @@ namespace SimpleInjector.Tests.Unit
         public void Verify_DecoratorWithFuncDecorateeWithFailingConstructor_ThrowsTheExpectedException()
         {
             // Arrange
-            var container = new Container();
+            var container = ContainerFactory.New();
+            container.Options.EnableAutoVerification = false;
 
             container.Register<IPlugin, FailingPlugin>();
             container.RegisterDecorator(typeof(IPlugin), typeof(PluginProxy), Lifestyle.Singleton);
@@ -450,7 +553,7 @@ namespace SimpleInjector.Tests.Unit
 
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<InvalidOperationException>(@"
-                contains parameter 'isInUserContext' of type Boolean, which can not be used for constructor 
+                contains parameter 'isInUserContext' of type bool, which can not be used for constructor
                 injection because it is a value type."
                 .TrimInside(),
                 action);
@@ -546,7 +649,7 @@ namespace SimpleInjector.Tests.Unit
 
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<InvalidOperationException>(
-                "A lifestyle mismatch is encountered",
+                "lifestyle mismatch",
                 action);
         }
 
@@ -555,6 +658,7 @@ namespace SimpleInjector.Tests.Unit
         {
             // Arrange
             var container = ContainerFactory.New();
+            container.Options.EnableAutoVerification = false;
             container.Options.SuppressLifestyleMismatchVerification = false;
 
             // Lifestyle Mismatch
@@ -566,7 +670,7 @@ namespace SimpleInjector.Tests.Unit
 
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<ActivationException>(
-                "A lifestyle mismatch is encountered",
+                "lifestyle mismatch",
                 action);
         }
 
@@ -628,6 +732,65 @@ namespace SimpleInjector.Tests.Unit
             // This should succeed, because container-registered instances have a low risk of causing errors
             // and the container will report them quite easily.
             container.Verify(VerificationOption.VerifyAndDiagnose);
+        }
+
+        [TestMethod]
+        public void Verify_WithAsyncDisposableScopedRegistration_Succeeds()
+        {
+            // Arrange
+            var container = ContainerFactory.New();
+            container.Options.DefaultScopedLifestyle = new AsyncScopedLifestyle();
+
+            container.Register<AsyncDisposablePlugin>(Lifestyle.Scoped);
+
+            // Act
+            container.Verify();
+        }
+
+        [TestMethod]
+        public async Task AutoVerification_WithAsyncDisposableScopedRegistration_Succeeds()
+        {
+            // Arrange
+            bool disposed = false;
+            bool created = false;
+            var container = new Container();
+            container.Options.EnableAutoVerification = true;
+            container.Options.DefaultScopedLifestyle = new AsyncScopedLifestyle();
+
+            container.Register<PluginImpl>();
+            container.Register(() =>
+                {
+                    created = true;
+                    return new AsyncDisposablePlugin { Disposing = () => disposed = true };
+                },
+                Lifestyle.Scoped);
+
+            var ambientScope = AsyncScopedLifestyle.BeginScope(container);
+
+            // Triggers auto verification on AsyncDisposablePlugin
+            container.GetInstance<PluginImpl>();
+
+            // Assert
+            Assert.IsTrue(created, "Auto verification didn't seem to go off.");
+            Assert.IsFalse(disposed, "Auto verification should have used ambient scope, not its own.");
+
+            // Act
+            await ambientScope.DisposeScopeAsync();
+
+            // Assert
+            Assert.IsTrue(disposed,
+                "Component should have tracked in ambient scope and disposed when calling DisposeScopeAsync.");
+        }
+
+        public class AsyncDisposablePlugin : IAsyncDisposable
+        {
+            public Action Disposing;
+
+            public ValueTask DisposeAsync()
+            {
+                this.Disposing?.Invoke();
+                return default;
+            }
         }
 
         public class PluginWithBooleanDependency : IPlugin

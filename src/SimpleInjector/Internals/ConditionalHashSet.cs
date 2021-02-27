@@ -1,24 +1,5 @@
-﻿#region Copyright Simple Injector Contributors
-/* The Simple Injector is an easy-to-use Inversion of Control library for .NET
- * 
- * Copyright (c) 2013-2016 Simple Injector Contributors
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and 
- * associated documentation files (the "Software"), to deal in the Software without restriction, including 
- * without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell 
- * copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the 
- * following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in all copies or substantial 
- * portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT 
- * LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO 
- * EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER 
- * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE 
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
-*/
-#endregion
+﻿// Copyright (c) Simple Injector Contributors. All rights reserved.
+// Licensed under the MIT License. See LICENSE file in the project root for license information.
 
 namespace SimpleInjector.Internals
 {
@@ -32,10 +13,10 @@ namespace SimpleInjector.Internals
 
         private static readonly Predicate<WeakReference> IsDead = reference => !reference.IsAlive;
 
-        private readonly Dictionary<int, List<WeakReference>> dictionary = 
+        private readonly Dictionary<int, List<WeakReference>> dictionary =
             new Dictionary<int, List<WeakReference>>();
 
-        private int shrinkCount = 0;
+        private int shrinkCount;
 
         internal void Add(T item)
         {
@@ -43,15 +24,13 @@ namespace SimpleInjector.Internals
 
             lock (this.dictionary)
             {
-                if (this.GetWeakReferenceOrNull(item) == null)
+                if (this.GetWeakReferenceOrNull(item) is null)
                 {
                     var weakReference = new WeakReference(item);
 
                     int key = weakReference.Target.GetHashCode();
 
-                    List<WeakReference> bucket;
-
-                    if (!this.dictionary.TryGetValue(key, out bucket))
+                    if (!this.dictionary.TryGetValue(key, out List<WeakReference> bucket))
                     {
                         this.dictionary[key] = bucket = new List<WeakReference>(capacity: 1);
                     }
@@ -67,7 +46,7 @@ namespace SimpleInjector.Internals
 
             lock (this.dictionary)
             {
-                WeakReference reference = this.GetWeakReferenceOrNull(item);
+                WeakReference? reference = this.GetWeakReferenceOrNull(item);
 
                 if (reference != null)
                 {
@@ -89,18 +68,16 @@ namespace SimpleInjector.Internals
                     from pair in this.dictionary
                     from reference in pair.Value
                     let target = reference.Target
-                    where !object.ReferenceEquals(target, null)
+                    where !(target is null)
                     select (T)target;
 
                 return producers.ToArray();
             }
         }
 
-        private WeakReference GetWeakReferenceOrNull(T item)
+        private WeakReference? GetWeakReferenceOrNull(T item)
         {
-            List<WeakReference> bucket;
-
-            if (this.dictionary.TryGetValue(item.GetHashCode(), out bucket))
+            if (this.dictionary.TryGetValue(item.GetHashCode(), out List<WeakReference> bucket))
             {
                 foreach (var reference in bucket)
                 {

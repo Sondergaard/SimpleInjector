@@ -46,7 +46,7 @@
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<ArgumentException>(@"
                 The supplied type ILogger is not a generic type. This method only supports open-generic types.
-                If you meant to register all available implementations of ILogger, call 
+                If you meant to register all available implementations of ILogger, call
                 Container.Collection.Register(typeof(ILogger), IEnumerable<Assembly>) instead.".TrimInside(),
                 action);
         }
@@ -62,9 +62,9 @@
 
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<ArgumentException>(string.Format(@"
-                The supplied type {0} is not an open-generic type. Supply this method with the open-generic 
-                type {1} to register all available implementations of this type, or call 
-                Container.Collection.Register(Type, IEnumerable<Assembly>) either with the open or closed version of 
+                The supplied type {0} is not an open-generic type. Supply this method with the open-generic
+                type {1} to register all available implementations of this type, or call
+                Container.Collection.Register(Type, IEnumerable<Assembly>) either with the open or closed version of
                 that type to register a collection of instances based on that type.".TrimInside(),
                 typeof(IService<int, int>).ToFriendlyName(),
                 Types.ToCSharpFriendlyName(typeof(IService<,>))),
@@ -83,7 +83,7 @@
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<ArgumentException>(@"
                 The supplied type ILogger is not a generic type. This method only supports open-generic types.
-                If you meant to register all available implementations of ILogger, call 
+                If you meant to register all available implementations of ILogger, call
                 Container.Collection.Register(typeof(ILogger), IEnumerable<Type>) instead.".TrimInside(),
                 action);
         }
@@ -99,9 +99,9 @@
 
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<ArgumentException>(string.Format(@"
-                The supplied type {0} is not an open-generic type. Supply this method with the open-generic 
-                type {1} to register all available implementations of this type, or call 
-                Container.Collection.Register(Type, IEnumerable<Type>) either with the open or closed version of 
+                The supplied type {0} is not an open-generic type. Supply this method with the open-generic
+                type {1} to register all available implementations of this type, or call
+                Container.Collection.Register(Type, IEnumerable<Type>) either with the open or closed version of
                 that type to register a collection of instances based on that type.".TrimInside(),
                 typeof(IService<int, int>).ToFriendlyName(),
                 Types.ToCSharpFriendlyName(typeof(IService<,>))),
@@ -424,10 +424,42 @@
             // Assert
             AssertThat.ThrowsWithParamName("implementationTypes", action);
             AssertThat.ThrowsWithExceptionMessageContains<ArgumentException>(@"
-                The supplied list of types contains one or multiple open-generic types, but this method 
-                is unable to handle open-generic types because it can only map closed-generic service 
-                types to a single implementation. You must register the open-generic types separately
-                using the Register(Type, Type) overload."
+                The supplied list of types contains an open-generic type, but this method is unable to 
+                handle open-generic implementations—it can only map a single implementation to
+                closed-generic service types. You must register this open-generic type separately using
+                the Register(Type, Type) overload. Alternatively, try using Container.Collection.Register
+                instead, if you expect to have multiple implementations per closed-generic service type
+                and want to inject a collection of them into consumers."
+                .TrimInside(),
+                action);
+        }
+
+        [TestMethod]
+        public void RegisterTypes_SuppliedWithCorrectTypesAndOpenGenericType_FailsWithExpectedExceptionContainingAnExample()
+        {
+            // Arrange
+            var container = ContainerFactory.New();
+
+            Type[] types = new[]
+            {
+                // An open-generic type
+                typeof(GenericHandler<>),
+
+                // A valid non-generic type
+                typeof(FloatHandler),
+            };
+
+            // Act
+            Action action = () => container.Register(typeof(IBatchCommandHandler<>), types);
+
+            // Assert
+            AssertThat.ThrowsWithExceptionMessageContains<ArgumentException>($@"
+                As an example, the supplied type {typeof(FloatHandler).ToFriendlyName()} can be used as 
+                implementation, because it implements the closed-generic service type
+                {typeof(IBatchCommandHandler<float>).ToFriendlyName()}.
+                The supplied open-generic {typeof(GenericHandler<>).ToFriendlyName()}, however, can't be
+                mapped to a closed-generic service because of its generic type argument.
+                You must register this open-generic type separately"
                 .TrimInside(),
                 action);
         }
@@ -515,13 +547,14 @@
             var container = new Container();
 
             container.Register(typeof(ISkipDecorator<>), Assemblies);
+            container.Register<SkippedDecoratorController>();
 
             // Act
             Action action = () => container.GetInstance<SkippedDecoratorController>();
 
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<ActivationException>(
-                "was skipped during batch-registration by the container because it is considered to be a decorator",
+                "was skipped during auto-registration by the container because it is considered to be a decorator",
                 action);
         }
 
@@ -538,7 +571,7 @@
 
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<ActivationException>(
-                "was skipped during batch-registration by the container because it is considered to be a decorator",
+                "was skipped during auto-registration by the container because it is considered to be a decorator",
                 action);
         }
 

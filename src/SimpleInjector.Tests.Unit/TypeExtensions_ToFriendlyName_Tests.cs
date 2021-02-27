@@ -11,7 +11,7 @@
         public void NonGenericTypeContainingBackTick_CreatesCorrectName()
         {
             // Arrange
-            // NSubstitute creates non-generic proxy types by postfixing the type name with "Proxy". This 
+            // NSubstitute creates non-generic proxy types by postfixing the type name with "Proxy". This
             // could result in something as follows:
             string expectedName = "IQueryHandler`2Proxy";
 
@@ -91,7 +91,7 @@
             Type type = typeof(GenericNastyness1<int>.Dictionary<object, string>.GenericKeyCollection<byte>);
 
             string expectedName =
-                "GenericNastyness1<TBla>.Dictionary<TKey, TValue>.GenericKeyCollection<Byte>";
+                "GenericNastyness1<TBla>.Dictionary<TKey, TValue>.GenericKeyCollection<byte>";
 
             // Act
             string actualName = type.ToFriendlyName();

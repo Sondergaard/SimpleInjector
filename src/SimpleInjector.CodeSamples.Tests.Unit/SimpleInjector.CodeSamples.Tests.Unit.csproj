@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net451</TargetFramework>
+    <TargetFramework>net461</TargetFramework>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AssemblyName>SimpleInjector.CodeSamples.Tests.Unit</AssemblyName>
     <PackageId>SimpleInjector.CodeSamples.Tests.Unit</PackageId>
@@ -13,6 +13,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\SimpleInjector.DynamicAssemblyCompilation\SimpleInjector.DynamicAssemblyCompilation.csproj" />
     <ProjectReference Include="..\SimpleInjector.Tests.Unit\SimpleInjector,Tests.Unit.csproj" />
     <ProjectReference Include="..\SimpleInjector\SimpleInjector.csproj" />
     <ProjectReference Include="..\SimpleInjector.CodeSamples\SimpleInjector.CodeSamples.csproj" />

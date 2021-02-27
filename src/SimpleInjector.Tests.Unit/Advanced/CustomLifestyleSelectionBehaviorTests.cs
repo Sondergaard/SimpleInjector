@@ -122,6 +122,8 @@
             container.Options.LifestyleSelectionBehavior =
                 new CustomLifestyleSelectionBehavior(Lifestyle.Singleton);
 
+            container.Register<RealTimeProvider>();
+
             // Act
             var instance1 = container.GetInstance<RealTimeProvider>();
             var instance2 = container.GetInstance<RealTimeProvider>();
@@ -138,6 +140,8 @@
 
             container.Options.LifestyleSelectionBehavior =
                 new CustomLifestyleSelectionBehavior(Lifestyle.Singleton);
+
+            container.Register<RealTimeProvider>();
 
             // Act
             var instance1 = container.GetInstance(typeof(RealTimeProvider));
@@ -386,9 +390,9 @@
 
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<ActivationException>(@"
-                The CustomLifestyleSelectionBehaviorTests.CustomLifestyleSelectionBehavior that was registered 
-                through Container.Options.LifestyleSelectionBehavior returned a null reference after its 
-                SelectLifestyle method was supplied with implementationType 'RealTimeProvider'. 
+                The CustomLifestyleSelectionBehaviorTests.CustomLifestyleSelectionBehavior that was registered
+                through Container.Options.LifestyleSelectionBehavior returned a null reference after its
+                SelectLifestyle method was supplied with implementationType 'RealTimeProvider'.
                 ILifestyleSelectionBehavior.SelectLifestyle implementations should never return null.
                 ".TrimInside(),
                 action);

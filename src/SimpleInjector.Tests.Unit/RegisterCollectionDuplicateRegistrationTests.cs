@@ -7,7 +7,7 @@
     using Microsoft.VisualStudio.TestTools.UnitTesting;
 
     /// <summary>
-    /// This set of tests control whether the container correctly prevents duplicate registrations of 
+    /// This set of tests control whether the container correctly prevents duplicate registrations of
     /// collections and correctly replaces a collection in case overriding registrations is allowed.
     /// </summary>
     [TestClass]
@@ -17,7 +17,7 @@
         public void RegisterCollectionTServiceUncontrolled_CalledTwiceWithSameClosedGenericType_Throws()
         {
             Assert_CalledTwiceForSameType_ThrowsExpectedMessage(
-                "Collection of items for type IEventHandler<Int32> has already been registered",
+                "Collection of items for type IEventHandler<int> has already been registered",
                 c => c.Collection.Register<IEventHandler<int>>(Enumerable.Empty<IEventHandler<int>>()));
         }
 
@@ -60,7 +60,7 @@
         public void RegisterCollectionTServiceSingletons_CalledTwiceWithSameClosedGenericType_Throws()
         {
             Assert_CalledTwiceForSameType_ThrowsExpectedMessage(
-                "Collection of items for type IEventHandler<Int32> has already been registered",
+                "Collection of items for type IEventHandler<int> has already been registered",
                 c => c.Collection.Register<IEventHandler<int>>(new[] { new StructConstraintEventHandler<int>() }));
         }
 
@@ -100,7 +100,7 @@
         public void RegisterCollectionTServiceTypes_CalledTwiceWithSameClosedGenericType_Throws()
         {
             Assert_CalledTwiceForSameType_ThrowsExpectedMessage(
-                "Collection of items for type IEventHandler<Int32> has already been registered",
+                "Collection of items for type IEventHandler<int> has already been registered",
                 c => c.Collection.Register<IEventHandler<int>>(new[] { typeof(StructConstraintEventHandler<int>) }));
         }
 
@@ -140,7 +140,7 @@
         public void RegisterCollectionTypes_CalledTwiceWithSameClosedGenericType_Throws()
         {
             Assert_CalledTwiceForSameType_ThrowsExpectedMessage(
-                "Collection of items for type IEventHandler<Int32> has already been registered",
+                "Collection of items for type IEventHandler<int> has already been registered",
                 c => c.Collection.Register(typeof(IEventHandler<int>), new[] { new StructConstraintEventHandler<int>() }));
         }
 
@@ -180,7 +180,7 @@
         public void RegisterCollectionRegistrations_CalledTwiceWithSameClosedGenericType_Throws()
         {
             Assert_CalledTwiceForSameType_ThrowsExpectedMessage(
-                "Collection of items for type IEventHandler<Int32> has already been registered",
+                "Collection of items for type IEventHandler<int> has already been registered",
                 c => c.Collection.Register(typeof(IEventHandler<int>), new[]
                 {
                     Lifestyle.Transient.CreateRegistration<StructConstraintEventHandler<int>>(c)
@@ -242,7 +242,7 @@
         public void RegisterCollectionUncontrolled_CalledTwiceWithSameClosedGenericType_Throws()
         {
             Assert_CalledTwiceForSameType_ThrowsExpectedMessage(
-                "Collection of items for type IEventHandler<Int32> has already been registered",
+                "Collection of items for type IEventHandler<int> has already been registered",
                 c => c.Collection.Register(typeof(IEventHandler<int>), Enumerable.Empty<IEventHandler<int>>()));
         }
 
@@ -289,7 +289,7 @@
                 typeof(AuditableEventEventHandler)
             });
 
-            // Act 
+            // Act
             Action action = () => container.Collection.Register(typeof(IEventHandler<>), new[] { typeof(StructEventHandler) });
 
             // Assert

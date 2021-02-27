@@ -53,6 +53,8 @@
                 convention.WithParameter("someValue", "foo"),
                 convention.WithParameter(() => DateTime.MinValue),
                 convention.WithParameter("name", () => "bar"));
+            
+            container.Register<ClassWithOnlyPrimitiveConstructorParams>();
 
             container.Verify();
 
@@ -82,7 +84,7 @@
         }
 
         [TestMethod]
-        public void RegisterSingle_WithAllValidParameters_Succeeds()
+        public void RegisterSingleton_WithAllValidParameters_Succeeds()
         {
             // Arrange
             var container = new Container();
@@ -100,7 +102,7 @@
 
             container.Verify();
 
-            container.GetInstance<ClassWithOnlyPrimitiveConstructorParams>();
+            container.GetInstance<IService>();
         }
 
         [TestMethod]
@@ -202,7 +204,7 @@
                 // Assert
                 Assert.Fail("Exception expected.");
             }
-            catch (ArgumentException ex)
+            catch (InvalidOperationException ex)
             {
                 AssertThat.StringContains(
                     "Parameter with name 'notExistingParamName' of type String is not a parameter of " +
@@ -233,7 +235,7 @@
                 // Assert
                 Assert.Fail("Exception expected.");
             }
-            catch (ArgumentException ex)
+            catch (InvalidOperationException ex)
             {
                 AssertThat.StringContains(
                     "Multiple parameter registrations found for type ClassWithOnlyPrimitiveConstructorParams " +

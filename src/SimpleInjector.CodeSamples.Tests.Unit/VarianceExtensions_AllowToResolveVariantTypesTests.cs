@@ -134,9 +134,9 @@
             }
             catch (ActivationException ex)
             {
-                Assert.IsTrue(ex.Message.Contains(expectedMessage), 
+                Assert.IsTrue(ex.Message.Contains(expectedMessage),
                     "Expected: " + expectedMessage + " Actual: " + ex.Message);
-                Assert.IsTrue(ex.Message.Contains("Action<Object>"), " Actual: " + ex.Message);
+                Assert.IsTrue(ex.Message.Contains("Action<object>"), " Actual: " + ex.Message);
                 Assert.IsTrue(ex.Message.Contains("Action<Exception>"), " Actual: " + ex.Message);
             }
         }

@@ -1,24 +1,5 @@
-#region Copyright Simple Injector Contributors
-/* The Simple Injector is an easy-to-use Inversion of Control library for .NET
- * 
- * Copyright (c) 2013-2016 Simple Injector Contributors
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and 
- * associated documentation files (the "Software"), to deal in the Software without restriction, including 
- * without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell 
- * copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the 
- * following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in all copies or substantial 
- * portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT 
- * LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO 
- * EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER 
- * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE 
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
-*/
-#endregion
+﻿// Copyright (c) Simple Injector Contributors. All rights reserved.
+// Licensed under the MIT License. See LICENSE file in the project root for license information.
 
 namespace SimpleInjector.Integration.Wcf
 {
@@ -29,13 +10,13 @@ namespace SimpleInjector.Integration.Wcf
     using System.ServiceModel.Description;
 
     /// <summary>
-    /// This service host is used to set up the service behavior that replaces the instance provider to use 
+    /// This service host is used to set up the service behavior that replaces the instance provider to use
     /// dependency injection.
     /// </summary>
     public class SimpleInjectorServiceHost : ServiceHost
     {
         private readonly Container container;
-        private readonly Type serviceAbstraction;
+        private readonly Type? serviceAbstraction;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="SimpleInjectorServiceHost"/> class.
@@ -61,8 +42,8 @@ namespace SimpleInjector.Integration.Wcf
         /// <param name="baseAddresses">The base addresses.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="container"/> is a null
         /// reference or <paramref name="singletonInstance"/> is a null reference.</exception>
-        public SimpleInjectorServiceHost(Container container, object singletonInstance, 
-            params Uri[] baseAddresses)
+        public SimpleInjectorServiceHost(
+            Container container, object singletonInstance, params Uri[] baseAddresses)
             : base(singletonInstance, baseAddresses)
         {
             Requires.IsNotNull(container, nameof(container));
@@ -71,8 +52,8 @@ namespace SimpleInjector.Integration.Wcf
             this.container = container;
         }
 
-        internal SimpleInjectorServiceHost(Container container, Type serviceAbstraction, Type implementationType,
-            params Uri[] baseAddresses)
+        internal SimpleInjectorServiceHost(
+            Container container, Type serviceAbstraction, Type implementationType, params Uri[] baseAddresses)
             : base(implementationType, baseAddresses)
         {
             Requires.IsNotNull(container, nameof(container));

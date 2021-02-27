@@ -39,6 +39,7 @@
                 context => context.ImplementationType == typeof(Plugin3));
 
             container.RegisterInstance<Func<string, IPlugin>>(key => plugins.GetInstance(key));
+            container.Register<NamedPluginConsumer>();
 
             container.Verify();
 
@@ -145,22 +146,17 @@
                 this.keyedProducerRetriever = keyedProducerRetriever;
             }
 
-            public InstanceProducer GetInstanceProducer(InjectionConsumerInfo consumer, bool throwOnFailure)
+            public InstanceProducer GetInstanceProducer(InjectionConsumerInfo dependency, bool throwOnFailure)
             {
-                var attribute = consumer.Target.GetCustomAttribute<NamedAttribute>();
+                var attribute = dependency.Target.GetCustomAttribute<NamedAttribute>();
 
-                if (attribute != null)
-                {
-                    return this.keyedProducerRetriever(consumer.Target.TargetType, attribute.Name);
-                }
-
-                return this.defaultBehavior.GetInstanceProducer(consumer, throwOnFailure);
+                return attribute != null
+                    ? this.keyedProducerRetriever(dependency.Target.TargetType, attribute.Name)
+                    : this.defaultBehavior.GetInstanceProducer(dependency, throwOnFailure);
             }
 
-            public void Verify(InjectionConsumerInfo consumer)
-            {
-                this.defaultBehavior.Verify(consumer);
-            }
+            public bool VerifyDependency(InjectionConsumerInfo dependency, out string errorMessage) =>
+                this.defaultBehavior.VerifyDependency(dependency, out errorMessage);
         }
     }
 }

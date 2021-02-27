@@ -14,21 +14,23 @@
 
         public static void EnableFor(Container container)
         {
-            if (container.GetItem(Key) == null)
+            if (container.ContainerScope.GetItem(Key) is null)
             {
-                container.SetItem(Key, new ThreadLocal<Scope>());
-                container.Options.RegisterResolveInterceptor(ApplyGraphScope, context => true);
+                var localScope = new ThreadLocal<Scope>();
+                container.ContainerScope.SetItem(Key, localScope);
+                container.ContainerScope.RegisterForDisposal(localScope);
+                container.Options.RegisterResolveInterceptor(ApplyGraphScope, _ => true);
             }
         }
 
         protected override Func<Scope> CreateCurrentScopeProvider(Container c) => () => GetScope(c);
         protected override Scope GetCurrentScopeCore(Container c) => GetScope(c);
-        private static Scope GetScope(Container c) => ((ThreadLocal<Scope>)c.GetItem(Key))?.Value ?? Throw();
+        private static Scope GetScope(Container c) => ((ThreadLocal<Scope>)c.ContainerScope.GetItem(Key))?.Value ?? Throw();
 
         private static object ApplyGraphScope(InitializationContext context, Func<object> instanceProducer)
         {
             var container = context.Registration.Container;
-            var threadLocal = (ThreadLocal<Scope>)container.GetItem(Key);
+            var threadLocal = (ThreadLocal<Scope>)container.ContainerScope.GetItem(Key);
 
             Scope original = threadLocal.Value;
 
@@ -39,7 +41,7 @@
             }
             finally
             {
-                // We deliberately don't dispose the Scope here, since this lifestyle should not 
+                // We deliberately don't dispose the Scope here, since this lifestyle should not
                 // dispose instances, because they outlive their scope.
                 // WARNING: Although per-graph instances are not disposed, the diagnostic sub system
                 // will not warn in case a disposable instance is registered as per-graph.

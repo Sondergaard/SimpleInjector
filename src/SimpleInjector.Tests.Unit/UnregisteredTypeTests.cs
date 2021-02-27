@@ -191,12 +191,11 @@
                     "The exception message should contain the missing constructor argument.");
 
                 AssertThat.ExceptionMessageContains(
-                    "Please ensure IUserRepository is registered",
+                    "For IUserRepository to be resolved, it must be registered in the container",
                     ex, "(1) The exception message should give a solution to solve the problem.");
 
                 AssertThat.ExceptionMessageContains(@"
-                    Please ensure IUserRepository is registered,
-                    or change the constructor of RealUserService"
+                    For IUserRepository to be resolved, it must be registered in the container"
                     .TrimInside(),
                     ex,
                     "(2) The exception message should give a solution to solve the problem.");
@@ -229,12 +228,11 @@
                     "The exception message should contain the missing constructor argument.");
 
                 AssertThat.ExceptionMessageContains(
-                    "Please ensure IUserRepository is registered",
+                    "For IUserRepository to be resolved, it must be registered in the container",
                     ex, "(1) The exception message should give a solution to solve the problem.");
 
                 AssertThat.ExceptionMessageContains(@"
-                    Please ensure IUserRepository is registered,
-                    or change the constructor of RealUserService"
+                    For IUserRepository to be resolved, it must be registered in the container"
                     .TrimInside(),
                     ex,
                     "(2) The exception message should give a solution to solve the problem.");
@@ -280,7 +278,7 @@
         {
             // Arrange
             string expectedMessage = typeof(ConcreteTypeWithValueTypeConstructorArgument).Name + " contains" +
-                " parameter 'intParam' of type Int32, which can not be used for constructor " +
+                " parameter 'intParam' of type int, which can not be used for constructor " +
                 "injection because it is a value type.";
 
             var container = ContainerFactory.New();
@@ -305,7 +303,7 @@
         {
             // Arrange
             string expectedMessage = typeof(ConcreteTypeWithStringConstructorArgument).Name + " contains pa" +
-                "rameter 'stringParam' of type String, which can not be used for constructor injection.";
+                "rameter 'stringParam' of type string, which can not be used for constructor injection.";
 
             var container = ContainerFactory.New();
 
@@ -328,6 +326,10 @@
         {
             // Arrange
             var container = ContainerFactory.New();
+
+            // Behavior is different with auto verification enabled, because the real user service is not
+            // resolved, but the complete container verified.
+            container.Options.EnableAutoVerification = false;
 
             container.Register<IUserRepository>(() => { throw new InvalidOperationException("Bla."); });
 

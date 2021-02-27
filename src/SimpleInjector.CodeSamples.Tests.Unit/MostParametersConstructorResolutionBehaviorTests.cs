@@ -35,6 +35,7 @@
 
             container.Register<ILogger, NullLogger>();
             container.Register<ICommand, ConcreteCommand>();
+            container.Register<MultipleConstructorsType>();
 
             // Act
             container.GetInstance<MultipleConstructorsType>();
@@ -63,6 +64,7 @@
 
             container.Register<ILogger, NullLogger>();
             container.Register<ICommand, ConcreteCommand>();
+            container.Register<MultipleConstructorsType>();
 
             // Act
             var instance = container.GetInstance<MultipleConstructorsType>();
@@ -209,6 +211,7 @@
         private static Container CreateContainerWithMostParametersConstructorResolutionBehavior()
         {
             var container = new Container();
+            container.Options.EnableAutoVerification = false;
 
             container.Options.ConstructorResolutionBehavior = new MostParametersConstructorResolutionBehavior();
 

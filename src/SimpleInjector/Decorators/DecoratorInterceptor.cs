@@ -1,31 +1,11 @@
-﻿#region Copyright Simple Injector Contributors
-/* The Simple Injector is an easy-to-use Inversion of Control library for .NET
- * 
- * Copyright (c) 2013 Simple Injector Contributors
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and 
- * associated documentation files (the "Software"), to deal in the Software without restriction, including 
- * without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell 
- * copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the 
- * following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in all copies or substantial 
- * portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT 
- * LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO 
- * EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER 
- * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE 
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
-*/
-#endregion
+﻿// Copyright (c) Simple Injector Contributors. All rights reserved.
+// Licensed under the MIT License. See LICENSE file in the project root for license information.
 
 namespace SimpleInjector.Decorators
 {
     using System;
     using System.Collections;
     using System.Collections.Generic;
-    using System.Reflection;
     using SimpleInjector.Internals;
 
     internal class DecoratorInterceptor
@@ -53,20 +33,17 @@ namespace SimpleInjector.Decorators
         protected Type ServiceTypeDefinition => this.data.ServiceType;
 
         // The decorator type definition (possibly open generic).
-        protected Type DecoratorTypeDefinition => this.data.DecoratorType;
+        protected Type? DecoratorTypeDefinition => this.data.DecoratorType;
 
         internal void ExpressionBuilt(object sender, ExpressionBuiltEventArgs e)
         {
             this.TryToApplyDecorator(e);
-
             this.TryToApplyDecoratorOnContainerUncontrolledCollections(e);
         }
 
         private void TryToApplyDecorator(ExpressionBuiltEventArgs e)
         {
-            Type closedDecoratorType;
-
-            if (this.MustDecorate(e.RegisteredServiceType, out closedDecoratorType))
+            if (this.MustDecorate(e.RegisteredServiceType, out Type? closedDecoratorType))
             {
                 var decoratorInterceptor =
                     new ServiceDecoratorExpressionInterceptor(this.data, this.registrationsCache, e);
@@ -75,10 +52,13 @@ namespace SimpleInjector.Decorators
                 {
                     if (this.data.DecoratorTypeFactory != null)
                     {
+                        // Context gets set by SatisfiesPredicate
+                        var context = decoratorInterceptor.Context!;
+
                         closedDecoratorType = this.GetDecoratorTypeFromDecoratorFactory(
-                            e.RegisteredServiceType, decoratorInterceptor.Context);
+                            e.RegisteredServiceType, context);
                     }
-                    
+
                     if (closedDecoratorType != null)
                     {
                         decoratorInterceptor.ApplyDecorator(closedDecoratorType);
@@ -90,7 +70,7 @@ namespace SimpleInjector.Decorators
         private void TryToApplyDecoratorOnContainerUncontrolledCollections(ExpressionBuiltEventArgs e)
         {
             if (!IsCollectionType(e.RegisteredServiceType) ||
-                DecoratorHelpers.IsContainerControlledCollectionExpression(e.Expression))
+                ControlledCollectionHelper.IsContainerControlledCollectionExpression(e.Expression))
             {
                 // NOTE: Decorators on controlled collections will be applied by the normal mechanism.
                 return;
@@ -98,28 +78,29 @@ namespace SimpleInjector.Decorators
 
             var serviceType = e.RegisteredServiceType.GetGenericArguments()[0];
 
-            Type decoratorType;
-
-            if (this.MustDecorate(serviceType, out decoratorType))
+            if (this.MustDecorate(serviceType, out Type? decoratorType))
             {
                 this.ApplyDecoratorOnContainerUncontrolledCollection(e, decoratorType);
             }
         }
 
-        private void ApplyDecoratorOnContainerUncontrolledCollection(ExpressionBuiltEventArgs e,
-            Type decoratorType)
+        private void ApplyDecoratorOnContainerUncontrolledCollection(
+            ExpressionBuiltEventArgs e, Type? decoratorType)
         {
             var serviceType = e.RegisteredServiceType.GetGenericArguments()[0];
 
-            var uncontrolledInterceptor = new ContainerUncontrolledServicesDecoratorInterceptor(this.data,
-                this.singletonDecoratedCollectionsCache, e, serviceType);
+            var uncontrolledInterceptor = new ContainerUncontrolledServicesDecoratorInterceptor(
+                this.data, this.singletonDecoratedCollectionsCache, e, serviceType);
 
             if (uncontrolledInterceptor.SatisfiesPredicate())
             {
                 if (this.data.DecoratorTypeFactory != null)
                 {
+                    // Context gets set by SatisfiesPredicate
+                    var context = uncontrolledInterceptor.Context!;
+
                     decoratorType = this.GetDecoratorTypeFromDecoratorFactory(
-                        serviceType, uncontrolledInterceptor.Context);
+                        serviceType, context);
                 }
 
                 if (decoratorType != null)
@@ -130,10 +111,10 @@ namespace SimpleInjector.Decorators
             }
         }
 
-        private static bool IsCollectionType(Type serviceType) => 
+        private static bool IsCollectionType(Type serviceType) =>
             typeof(IEnumerable<>).IsGenericTypeDefinitionOf(serviceType);
 
-        private bool MustDecorate(Type serviceType, out Type decoratorType)
+        private bool MustDecorate(Type serviceType, out Type? decoratorType)
         {
             decoratorType = null;
 
@@ -157,7 +138,7 @@ namespace SimpleInjector.Decorators
                 return true;
             }
 
-            var results = this.BuildClosedGenericImplementation(serviceType);
+            var results = this.BuildClosedGenericImplementation(serviceType, this.DecoratorTypeDefinition!);
 
             if (!results.ClosedServiceTypeSatisfiesAllTypeConstraints)
             {
@@ -169,10 +150,10 @@ namespace SimpleInjector.Decorators
             return true;
         }
 
-        private Type GetDecoratorTypeFromDecoratorFactory(Type requestedServiceType, 
-            DecoratorPredicateContext context)
+        private Type? GetDecoratorTypeFromDecoratorFactory(
+            Type requestedServiceType, DecoratorPredicateContext context)
         {
-            Type decoratorType = this.data.DecoratorTypeFactory(context);
+            Type decoratorType = this.data.DecoratorTypeFactory!(context);
 
             if (decoratorType.ContainsGenericParameters())
             {
@@ -188,25 +169,34 @@ namespace SimpleInjector.Decorators
 
                 var builder = new GenericTypeBuilder(requestedServiceType, decoratorType);
 
-                decoratorType = builder.BuildClosedGenericImplementation().ClosedGenericImplementation;
+                var results = builder.BuildClosedGenericImplementation();
 
-                // decoratorType == null when type constraints don't match.
-                if (decoratorType != null)
+                // decoratorType is null when type constraints don't match.
+                if (results.ClosedServiceTypeSatisfiesAllTypeConstraints)
                 {
-                    Requires.HasFactoryCreatedDecorator(this.data.Container, requestedServiceType, decoratorType);
+                    Requires.HasFactoryCreatedDecorator(
+                        this.data.Container, requestedServiceType, results.ClosedGenericImplementation!);
+
+                    return results.ClosedGenericImplementation;
+                }
+                else
+                {
+                    return null;
                 }
             }
             else
             {
-                Requires.FactoryReturnsATypeThatIsAssignableFromServiceType(requestedServiceType, decoratorType);
-            }
+                Requires.FactoryReturnsATypeThatIsAssignableFromServiceType(
+                    requestedServiceType, decoratorType);
 
-            return decoratorType;
+                return decoratorType;
+            }
         }
 
-        private GenericTypeBuilder.BuildResult BuildClosedGenericImplementation(Type serviceType)
+        private GenericTypeBuilder.BuildResult BuildClosedGenericImplementation(
+            Type serviceType, Type decoratorTypeDefinition)
         {
-            var builder = new GenericTypeBuilder(serviceType, this.DecoratorTypeDefinition);
+            var builder = new GenericTypeBuilder(serviceType, decoratorTypeDefinition);
 
             return builder.BuildClosedGenericImplementation();
         }

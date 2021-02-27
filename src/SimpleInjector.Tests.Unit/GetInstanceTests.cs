@@ -34,7 +34,7 @@
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<ActivationException>(@"
                 The constructor of type ServiceWithUnregisteredDependencies contains the parameter with name
-                'a' and type IDisposable that is not registered."
+                'a' and type IDisposable, but IDisposable is not registered."
                 .TrimInside(),
                 action);
         }
@@ -50,8 +50,8 @@
 
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<ActivationException>(@"
-                The constructor of type ServiceWithUnregisteredDependencies contains the parameter 
-                with name 'a' and type IDisposable that is not registered."
+                The constructor of type ServiceWithUnregisteredDependencies contains the parameter
+                with name 'a' and type IDisposable, but IDisposable is not registered."
                 .TrimInside(),
                 action);
         }
@@ -67,8 +67,8 @@
 
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<ActivationException>(@"
-                The constructor of type ServiceWithUnregisteredDependencies contains the parameter 
-                with name 'a' and type IDisposable that is not registered."
+                The constructor of type ServiceWithUnregisteredDependencies contains the parameter
+                with name 'a' and type IDisposable, but IDisposable is not registered."
                 .TrimInside(),
                 action);
         }
@@ -131,8 +131,8 @@
 
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<ArgumentException>(@"
-                The request for type Lazy<T> is invalid because it is an open-generic type: it is only 
-                possible to instantiate instances of closed-generic types. A generic type is closed if all of 
+                The request for type Lazy<T> is invalid because it is an open-generic type: it is only
+                possible to instantiate instances of closed-generic types. A generic type is closed if all of
                 its type parameters have been substituted with types that are recognized by the compiler."
                 .TrimInside(),
                 action);
@@ -231,7 +231,7 @@
 
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<ActivationException>(@"
-                No registration for type FakeUserService could be found and an implicit registration 
+                No registration for type FakeUserService could be found and an implicit registration
                 could not be made."
                 .TrimInside(),
                 action);
@@ -248,7 +248,7 @@
 
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<ActivationException>(
-                "No registration for type Func<Object> could be found.",
+                "No registration for type Func<object> could be found.",
                 action);
         }
 
@@ -346,7 +346,7 @@
 
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<ActivationException>(@"
-                No registration for type ILogger could be found. 
+                No registration for type ILogger could be found.
                 There is, however, a registration for IEnumerable<ILogger>;
                 Did you mean to call GetAllInstances<ILogger>() or depend on IEnumerable<ILogger>?"
                 .TrimInside(),
@@ -360,16 +360,18 @@
             var container = new Container();
 
             container.Collection.Register(typeof(ILogger), new[] { typeof(NullLogger) });
+            container.Register<ComponentDependingOn<ILogger>>();
 
             // Act
             Action action = () => container.GetInstance<ComponentDependingOn<ILogger>>();
 
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<ActivationException>(@"
-                There is, however, a registration for IEnumerable<ILogger>; 
-                Did you mean to depend on IEnumerable<ILogger>?
-                If you meant to depend on ILogger, 
-                you should use one of the Register overloads instead of using Container.Collection.Register"
+                There is, however, a registration for a collection of ILogger instances;
+                Did you mean to depend on IEnumerable<ILogger> instead?
+                If you meant to depend on ILogger,
+                you should use one of the Container.Register overloads instead of using 
+                Container.Collection.Register"
                 .TrimInside(),
                 action);
         }
@@ -407,7 +409,7 @@
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<ActivationException>(@"
                 No registration for type IEnumerable<ILogger> could be found.
-                There is, however, a registration for ILogger; 
+                There is, however, a registration for ILogger;
                 Did you mean to call GetInstance<ILogger>() or depend on ILogger?"
                 .TrimInside(),
                 action);
@@ -420,6 +422,7 @@
             var container = new Container();
 
             container.Register<ILogger, NullLogger>();
+            container.Register<ComponentDependingOn<IEnumerable<ILogger>>>();
 
             // Act
             Action action = () => container.GetInstance<ComponentDependingOn<IEnumerable<ILogger>>>();
@@ -446,134 +449,6 @@
 
             AssertThat.ThrowsWithExceptionMessageDoesNotContain<ActivationException>(
                 "GetAllInstances<ILogger>()",
-                action);
-        }
-
-        [TestMethod]
-        public void GetInstance_OnMissingTypeWithNoLookalike_DoesNotReportLookalikes()
-        {
-            // Arrange
-            var container = new Container();
-
-            // Act
-            Action action = () => container.GetInstance<IDuplicate>();
-
-            // Assert
-            AssertThat.ThrowsWithExceptionMessageDoesNotContain<ActivationException>(
-                "Note that there exists a registration for a different type",
-                action);
-        }
-
-        [TestMethod]
-        public void GetInstance_OnMissingConstructorDependencyWithNoLookalike_DoesNotReportLookalikes()
-        {
-            // Arrange
-            var container = new Container();
-
-            // Act
-            Action action = () => container.GetInstance<ServiceDependingOn<IDuplicate>>();
-
-            // Assert
-            AssertThat.ThrowsWithExceptionMessageDoesNotContain<ActivationException>(
-                "Note that there exists a registration for a different type",
-                action);
-        }
-
-        [TestMethod]
-        public void GetInstance_OnMissingTypeWithLookalikeAsExternalProducer_DoesNotReportLookalikes()
-        {
-            // Arrange
-            var container = new Container();
-
-            var externalProducer = Lifestyle.Transient.CreateProducer<IDuplicate, Duplicate>(container);
-
-            // Act
-            Action action = () => container.GetInstance<ServiceDependingOn<IDuplicate>>();
-
-            // Assert
-            // This exception is not expected to be thrown, because external producers are not registered
-            // in the container and can not be resolved from the container. Reporting them would be confusing.
-            AssertThat.ThrowsWithExceptionMessageDoesNotContain<ActivationException>(
-                "Note that there exists a registration for a different type",
-                action);
-
-            GC.KeepAlive(externalProducer);
-        }
-
-        [TestMethod]
-        public void GetInstance_ConsumerDependingOnConditionalRegistrationsThatDoNotGetInjected_DoesNotReportLookalikes()
-        {
-            // Arrange
-            var container = ContainerFactory.New();
-
-            container.RegisterConditional(typeof(ILogger), typeof(NullLogger), Lifestyle.Singleton, c => false);
-            container.RegisterConditional(typeof(ILogger), typeof(ConsoleLogger), Lifestyle.Singleton, c => false);
-
-            // Act
-            Action action = () => container.GetInstance<ServiceWithDependency<ILogger>>();
-
-            // Assert
-            AssertThat.ThrowsWithExceptionMessageDoesNotContain<ActivationException>(
-                "Note that there exists a registration for a different type",
-                action);
-        }
-
-        [TestMethod]
-        public void GetInstance_OnMissingTypeWithExistingLookalike_WarnsAboutThisLookalike()
-        {
-            // Arrange
-            var container = new Container();
-
-            container.Register<IDuplicate, Duplicate>();
-
-            // Act
-            Action action = () => container.GetInstance<SimpleInjector.Tests.Unit.Duplicates.IDuplicate>();
-
-            // Assert
-            AssertThat.ThrowsWithExceptionMessageContains<ActivationException>(@"
-                Note that there exists a registration for a different type 
-                SimpleInjector.Tests.Unit.IDuplicate while the requested type is 
-                SimpleInjector.Tests.Unit.Duplicates.IDuplicate."
-                .TrimInside(),
-                action);
-        }
-
-        [TestMethod]
-        public void GetInstance_MissingConstructorDependencyWithExistingLookalike_WarnsAboutThisLookalike()
-        {
-            // Arrange
-            var container = new Container();
-
-            container.Register<IDuplicate, Duplicate>();
-
-            // Act
-            Action action = () => container.GetInstance<ServiceDependingOn<SimpleInjector.Tests.Unit.Duplicates.IDuplicate>>();
-
-            // Assert
-            AssertThat.ThrowsWithExceptionMessageContains<ActivationException>(@"
-                Note that there exists a registration for a different type
-                SimpleInjector.Tests.Unit.IDuplicate"
-                .TrimInside(),
-                action);
-        }
-
-        [TestMethod]
-        public void GetInstance_OnMissingConstructorDependencyWithExistingOpenGenericLookalike_WarnsAboutThisLookalike()
-        {
-            // Arrange
-            var container = new Container();
-
-            container.Register(typeof(IDuplicate<>), typeof(Duplicate<>));
-
-            // Act
-            Action action = () =>
-                container.GetInstance<ServiceDependingOn<SimpleInjector.Tests.Unit.Duplicates.IDuplicate<object>>>();
-
-            // Assert
-            AssertThat.ThrowsWithExceptionMessageContains<ActivationException>(@"
-                Note that there exists a registration for a different type
-                SimpleInjector.Tests.Unit.IDuplicate<T>"
-                .TrimInside(),
                 action);
         }
 

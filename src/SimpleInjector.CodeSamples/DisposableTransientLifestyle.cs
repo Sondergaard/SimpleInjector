@@ -28,29 +28,29 @@
 
         public static void EnableForContainer(Container container)
         {
-            bool alreadyInitialized = container.GetItem(ItemKey) != null;
+            bool alreadyInitialized = container.ContainerScope.GetItem(ItemKey) != null;
 
             if (!alreadyInitialized)
             {
                 AddGlobalDisposableInitializer(container);
 
-                container.SetItem(ItemKey, ItemKey);
+                container.ContainerScope.SetItem(ItemKey, ItemKey);
             }
         }
 
-        protected override Registration CreateRegistrationCore<TConcrete>(Container c) =>
-            new DisposableRegistration<TConcrete>(this.scopedLifestyle, this, c, null);
+        protected override Registration CreateRegistrationCore(Type concreteType, Container c) =>
+            new DisposableRegistration(this.scopedLifestyle, this, c, concreteType);
 
         protected override Registration CreateRegistrationCore<TService>(Func<TService> ic, Container c) =>
-            new DisposableRegistration<TService>(this.scopedLifestyle, this, c, ic);
+            new DisposableRegistration(this.scopedLifestyle, this, c, typeof(TService), ic);
 
         private static void TryEnableTransientDisposalOrThrow(Container container)
         {
-            bool alreadyInitialized = container.GetItem(ItemKey) != null;
+            bool alreadyInitialized = container.ContainerScope.GetItem(ItemKey) != null;
 
             if (!alreadyInitialized)
             {
-                if (container.IsLocked())
+                if (container.IsLocked)
                 {
                     throw new InvalidOperationException(
                         "Please make sure DisposableTransientLifestyle.EnableForContainer(Container) is " +
@@ -64,41 +64,31 @@
         private static void AddGlobalDisposableInitializer(Container container) =>
             container.RegisterInitializer(RegisterForDisposal, ShouldApplyInitializer);
 
-        private static bool ShouldApplyInitializer(InitializerContext context) => 
+        private static bool ShouldApplyInitializer(InitializerContext context) =>
             context.Registration is IDisposableRegistration;
 
         private static void RegisterForDisposal(InstanceInitializationData data)
         {
-            var instance = data.Instance as IDisposable;
-
-            if (instance != null)
+            if (data.Instance is IDisposable instance)
             {
                 var registation = (IDisposableRegistration)data.Context.Registration;
                 registation.ScopedLifestyle.RegisterForDisposal(data.Context.Registration.Container, instance);
             }
         }
 
-        private sealed class DisposableRegistration<TImpl> : Registration, IDisposableRegistration 
-            where TImpl : class
+        private sealed class DisposableRegistration : Registration, IDisposableRegistration
         {
-            private readonly Func<TImpl> instanceCreator;
-
-            internal DisposableRegistration(ScopedLifestyle s, Lifestyle l, Container c, Func<TImpl> ic) : base(l, c)
+            internal DisposableRegistration(
+                ScopedLifestyle s, Lifestyle l, Container c, Type concreteType, Func<object> ic = null)
+                : base(l, c, concreteType, ic)
             {
-                this.instanceCreator = ic;
                 this.ScopedLifestyle = s;
-
                 DisposableTransientLifestyle.TryEnableTransientDisposalOrThrow(c);
             }
 
-            public override Type ImplementationType => typeof(TImpl);
-
             public ScopedLifestyle ScopedLifestyle { get; }
 
-            public override Expression BuildExpression() =>
-                this.instanceCreator == null
-                    ? this.BuildTransientExpression()
-                    : this.BuildTransientExpression(this.instanceCreator);
+            public override Expression BuildExpression() => this.BuildTransientExpression();
         }
     }
 }

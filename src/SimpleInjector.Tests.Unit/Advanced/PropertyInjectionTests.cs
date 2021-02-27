@@ -56,8 +56,8 @@
 
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<ActivationException>(@"
-                property with name 'Dependency' and type ITimeProvider that is not registered. 
-                Please ensure ITimeProvider is registered"
+                property with name 'Dependency' and type ITimeProvider, but ITimeProvider is not registered.
+                For ITimeProvider to be resolved, it must be registered in the container"
                 .TrimInside(),
                 action);
         }
@@ -113,7 +113,7 @@
             // lead to a fragile configuration, because when a IPropertySelectionBehavior implementation
             // returns true for that given property, it would not expect it to be ignored. Take for instance
             // an custom IPropertySelectionBehavior that reacts on some [Inject] attribute to enable property
-            // injection. When an application developer decorates a property with [Inject], ignoring that 
+            // injection. When an application developer decorates a property with [Inject], ignoring that
             // property when it is static would be a bad thing. On the other hand, it would be as bad as trying
             // to inject into the static property.
             AssertThat.ThrowsWithExceptionMessageContains<ActivationException>(
@@ -360,7 +360,7 @@
             var uninjectedProperties =
                 from property in instance.GetType().GetProperties()
                 let value = property.GetValue(instance, null)
-                where value == null
+                where value is null
                 select property.Name;
 
             Assert.IsFalse(uninjectedProperties.Any(),

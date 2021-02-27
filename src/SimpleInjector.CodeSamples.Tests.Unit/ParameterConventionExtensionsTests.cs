@@ -45,13 +45,15 @@
 
             var container = CreateContainerWithConventions(new ConnectionStringsConvention(GetConnectionString));
 
+            container.Register<TypeWithConnectionStringConstructorArgument>();
+
             // Act
             var instance = container.GetInstance<TypeWithConnectionStringConstructorArgument>();
 
             // Assert
             Assert.AreEqual(expectedConnectionString, instance.Cs1ConnectionString);
         }
-        
+
         [TestMethod]
         public void ConnectionStringsConvention_ResolvingTypeWithConnectionStringProperty_InjectsExpectedValue()
         {
@@ -71,7 +73,7 @@
             // Assert
             Assert.AreEqual(expectedConnectionString, instance.Cs1ConnectionString);
         }
-        
+
         [TestMethod]
         public void ConnectionStringsConvention_RegisteringTypeWithIntParameterWhichNameEndsWithConnectionString_FailsWithExpectedException()
         {
@@ -90,7 +92,7 @@
             {
                 AssertThat.StringContains("The constructor of type " +
                     "ParameterConventionExtensionsTests.TypeWithConnectionStringIntConstructorArgument contains " +
-                    "parameter 'cs1ConnectionString' of type Int32, which can not be used for constructor " +
+                    "parameter 'cs1ConnectionString' of type int, which can not be used for constructor " +
                     "injection because it is a value type.", ex.Message);
             }
         }
@@ -113,7 +115,7 @@
             {
                 AssertThat.StringContains("The constructor of type " +
                     "ParameterConventionExtensionsTests.TypeWithConnectionStringIntConstructorArgument contains " +
-                    "parameter 'cs1ConnectionString' of type Int32, which can not be used for constructor " +
+                    "parameter 'cs1ConnectionString' of type int, which can not be used for constructor " +
                     "injection because it is a value type.", ex.Message);
             }
         }
@@ -132,7 +134,7 @@
                 // Assert
                 Assert.Fail("Exception was expected.");
             }
-            catch (ArgumentException ex)
+            catch (InvalidOperationException ex)
             {
                 AssertThat.StringContains(
                     "No connection string with name 'doesNotExist' could be found", ex.Message);
@@ -153,7 +155,7 @@
                 // Assert
                 Assert.Fail("Exception was expected.");
             }
-            catch (ActivationException ex)
+            catch (InvalidOperationException ex)
             {
                 AssertThat.StringContains(
                     "No connection string with name 'doesNotExist' could be found", ex.Message);
@@ -179,6 +181,8 @@
 
             var container = CreateContainerWithConventions(new AppSettingsConvention(GetAppSetting));
 
+            container.Register<TypeWithAppSettingsStringConstructorArgument>();
+
             // Act
             var instance = container.GetInstance<TypeWithAppSettingsStringConstructorArgument>();
 
@@ -203,6 +207,8 @@
             Guid expectedAppSetting = Guid.Parse(AppSettings["as2"]);
 
             var container = CreateContainerWithConventions(new AppSettingsConvention(GetAppSetting));
+
+            container.Register<TypeWithAppSettingsGuidConstructorArgument>();
 
             // Act
             var instance = container.GetInstance<TypeWithAppSettingsGuidConstructorArgument>();
@@ -230,6 +236,8 @@
             // Arrange
             var container = CreateContainerWithConventions(new AppSettingsConvention(GetAppSetting));
 
+            container.Register<TypeWithAppSettingConstructorArgumentOfReferenceType>();
+
             try
             {
                 // Act
@@ -240,10 +248,10 @@
             }
             catch (ActivationException ex)
             {
-                AssertThat.StringContains("The constructor of type " +
-                    "ParameterConventionExtensionsTests.TypeWithAppSettingConstructorArgumentOfReferenceType " +
-                    "contains the parameter with name 'as1AppSetting' and type IDisposable that is not " +
-                    "registered.", ex.Message);
+                AssertThat.StringContains("The constructor of type ParameterConventionExtensionsTests" +
+                    ".TypeWithAppSettingConstructorArgumentOfReferenceType contains the parameter with " +
+                    "name 'as1AppSetting' and type IDisposable, but IDisposable is not registered.",
+                    ex.Message);
             }
         }
 
@@ -261,7 +269,7 @@
                 // Assert
                 Assert.Fail("Exception was expected.");
             }
-            catch (ArgumentException ex)
+            catch (InvalidOperationException ex)
             {
                 AssertThat.StringContains("No application setting with key 'doesNotExist' could be found", ex.Message);
             }
@@ -281,7 +289,7 @@
                 // Assert
                 Assert.Fail("Exception was expected.");
             }
-            catch (ActivationException ex)
+            catch (InvalidOperationException ex)
             {
                 AssertThat.StringContains("No application setting with key 'doesNotExist' could be found", ex.Message);
             }
@@ -310,6 +318,8 @@
                 new ConnectionStringsConvention(GetConnectionString),
                 new AppSettingsConvention(GetAppSetting));
 
+            container.Register<TypeWithBothConnectionStringAndAppSettingsConstructorArguments>();
+
             // Act
             var instance =
                 container.GetInstance<TypeWithBothConnectionStringAndAppSettingsConstructorArguments>();
@@ -325,8 +335,10 @@
             // Arrange
             var container = new Container();
 
-            AddConventions(container, 
+            AddConventions(container,
                 new OptionalParameterConvention(container.Options.DependencyInjectionBehavior));
+
+            container.Register<TypeWithOptionalDependency<IDisposable>>();
 
             // Act
             var instance = container.GetInstance<TypeWithOptionalDependency<IDisposable>>();
@@ -347,6 +359,7 @@
                 new OptionalParameterConvention(container.Options.DependencyInjectionBehavior));
 
             container.RegisterInstance<ILogger>(dependency);
+            container.Register<TypeWithOptionalDependency<ILogger>>();
 
             // Act
             var instance = container.GetInstance<TypeWithOptionalDependency<ILogger>>();
@@ -379,6 +392,8 @@
 
             AddConventions(container,
                 new OptionalParameterConvention(container.Options.DependencyInjectionBehavior));
+
+            container.Register<TypeWithOptionalIntDependencyWithDefaultValueOfFive>();
 
             // Act
             var instance = container.GetInstance<TypeWithOptionalIntDependencyWithDefaultValueOfFive>();
@@ -420,7 +435,7 @@
         {
             public string Cs1ConnectionString { get; set; }
         }
-        
+
         public class TypeWithConnectionStringIntConstructorArgument
         {
             public TypeWithConnectionStringIntConstructorArgument(int cs1ConnectionString)

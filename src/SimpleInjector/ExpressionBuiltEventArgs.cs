@@ -1,24 +1,5 @@
-﻿#region Copyright Simple Injector Contributors
-/* The Simple Injector is an easy-to-use Inversion of Control library for .NET
- * 
- * Copyright (c) 2013 Simple Injector Contributors
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and 
- * associated documentation files (the "Software"), to deal in the Software without restriction, including 
- * without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell 
- * copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the 
- * following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in all copies or substantial 
- * portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT 
- * LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO 
- * EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER 
- * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE 
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
-*/
-#endregion
+﻿// Copyright (c) Simple Injector Contributors. All rights reserved.
+// Licensed under the MIT License. See LICENSE file in the project root for license information.
 
 namespace SimpleInjector
 {
@@ -32,26 +13,31 @@ namespace SimpleInjector
     using SimpleInjector.Advanced;
 
     /// <summary>
-    /// Provides data for and interaction with the 
-    /// <see cref="Container.ExpressionBuilt">ExpressionBuilt</see> event of 
-    /// the <see cref="Container"/>. An observer can change the 
-    /// <see cref="Expression"/> property to change the component that is currently 
-    /// being built. 
+    /// Provides data for and interaction with the
+    /// <see cref="Container.ExpressionBuilt">ExpressionBuilt</see> event of
+    /// the <see cref="Container"/>. An observer can change the
+    /// <see cref="Expression"/> property to change the component that is currently
+    /// being built.
     /// </summary>
-    [DebuggerDisplay(nameof(ExpressionBuiltEventArgs) + " ({" + nameof(DebuggerDisplay) + "), nq})")]
+    [DebuggerDisplay(nameof(ExpressionBuiltEventArgs) + " ({" + nameof(ExpressionBuiltEventArgs.DebuggerDisplay) + ", nq})")]
     public class ExpressionBuiltEventArgs : EventArgs
     {
         private Expression expression;
         private Lifestyle lifestyle;
 
-        /// <summary>Initializes a new instance of the <see cref="ExpressionBuiltEventArgs"/> class.</summary>
-        /// <param name="registeredServiceType">Type of the registered service.</param>
-        /// <param name="expression">The registered expression.</param>
-        public ExpressionBuiltEventArgs(Type registeredServiceType, Expression expression)
+        internal ExpressionBuiltEventArgs(
+            Type registeredServiceType,
+            Expression expression,
+            InstanceProducer producer,
+            Registration replacedRegistration,
+            Collection<KnownRelationship> knownRelationships)
         {
             this.RegisteredServiceType = registeredServiceType;
-
             this.expression = expression;
+            this.InstanceProducer = producer;
+            this.lifestyle = producer.Lifestyle;
+            this.ReplacedRegistration = replacedRegistration;
+            this.KnownRelationships = knownRelationships;
         }
 
         /// <summary>Gets the registered service type that is currently requested.</summary>
@@ -59,7 +45,7 @@ namespace SimpleInjector
         [DebuggerDisplay("{" + TypesExtensions.FriendlyName + "(" + nameof(RegisteredServiceType) + "), nq}")]
         public Type RegisteredServiceType { get; }
 
-        /// <summary>Gets or sets the currently registered 
+        /// <summary>Gets or sets the currently registered
         /// <see cref="System.Linq.Expressions.Expression">Expression</see>.</summary>
         /// <value>The current registration.</value>
         /// <exception cref="ArgumentNullException">Thrown when the supplied value is a null reference.</exception>
@@ -96,7 +82,7 @@ namespace SimpleInjector
         }
 
         /// <summary>
-        /// Gets the collection of currently known relationships. This information is used by the Diagnostics 
+        /// Gets the collection of currently known relationships. This information is used by the Diagnostics
         /// Debug View. Change the contents of this collection to represent the changes made to the
         /// <see cref="Expression">Expression</see> property (if any). This allows
         /// the Diagnostics Debug View to analyze those new relationships as well.
@@ -109,6 +95,17 @@ namespace SimpleInjector
         internal Registration ReplacedRegistration { get; set; }
 
         internal InstanceProducer InstanceProducer { get; set; }
+
+        // By storing the ServiceTypeDecoratorInfo as part of the ExpressionBuiltEventArgs instance, we allow
+        // all applied decorators on a single InstanceProducer to reuse this info object, which allows them to,
+        // among other things, to construct DecoratorPredicateContext objects.
+        // It seems a bit ugly to let ExpressionBuiltEventArgs reference the decorator sub system, but the
+        // (more decoupled) alternative would be to expose a Items Dictionary that can be used to add arbitrary
+        // items, such as an ServiceTypeDecoratorInfo. Although great, we don't need that flexibility, and the
+        // creation of a new Dictionary object for every InstanceProducer that gets a one or multiple decorators
+        // applied can cause quite a lot of memory overhead (an empty Dictionary takes roughly 60 bytes of
+        // memory in a 32bit process).
+        internal Decorators.ServiceTypeDecoratorInfo? DecoratorInfo { get; set; }
 
         [SuppressMessage("Microsoft.Performance", "CA1811:AvoidUncalledPrivateCode",
             Justification = "This method is called by the debugger.")]

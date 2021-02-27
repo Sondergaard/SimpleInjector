@@ -1,24 +1,5 @@
-﻿#region Copyright Simple Injector Contributors
-/* The Simple Injector is an easy-to-use Inversion of Control library for .NET
- * 
- * Copyright (c) 2013-2016 Simple Injector Contributors
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and 
- * associated documentation files (the "Software"), to deal in the Software without restriction, including 
- * without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell 
- * copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the 
- * following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in all copies or substantial 
- * portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT 
- * LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO 
- * EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER 
- * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE 
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
-*/
-#endregion
+﻿// Copyright (c) Simple Injector Contributors. All rights reserved.
+// Licensed under the MIT License. See LICENSE file in the project root for license information.
 
 namespace SimpleInjector
 {
@@ -37,45 +18,61 @@ namespace SimpleInjector
     /// </summary>
     /// <remarks>
     /// <see cref="Lifestyle"/> implementations create a new <b>Registration</b> instance for each registered
-    /// service type. <see cref="Expression"/>s returned from the 
-    /// <see cref="Registration.BuildExpression()">BuildExpression</see> method can be 
-    /// intercepted by any event registered with <see cref="SimpleInjector.Container.ExpressionBuilding" />, have 
-    /// <see cref="SimpleInjector.Container.RegisterInitializer{TService}(Action{TService})">initializers</see> 
-    /// applied, and the caching particular to its lifestyle have been applied. Interception using the 
-    /// <see cref="SimpleInjector.Container.ExpressionBuilt">Container.ExpressionBuilt</see> will <b>not</b> 
+    /// service type. <see cref="Expression"/>s returned from the
+    /// <see cref="Registration.BuildExpression()">BuildExpression</see> method can be
+    /// intercepted by any event registered with <see cref="SimpleInjector.Container.ExpressionBuilding" />, have
+    /// <see cref="SimpleInjector.Container.RegisterInitializer{TService}(Action{TService})">initializers</see>
+    /// applied, and the caching particular to its lifestyle have been applied. Interception using the
+    /// <see cref="SimpleInjector.Container.ExpressionBuilt">Container.ExpressionBuilt</see> will <b>not</b>
     /// be applied in the <b>Registration</b>, but will be applied in <see cref="InstanceProducer"/>.</remarks>
     /// <example>
     /// See the <see cref="Lifestyle"/> documentation for an example.
     /// </example>
     public abstract class Registration
     {
-        private static readonly Action<object> NoOp = instance => { };
+        private static readonly Action<object> NoOp = _ => { };
 
         private readonly HashSet<KnownRelationship> knownRelationships = new HashSet<KnownRelationship>();
 
-        private HashSet<DiagnosticType> suppressions;
-        private ParameterDictionary<OverriddenParameter> overriddenParameters;
-        private Action<object> instanceInitializer;
+        internal readonly Func<object>? instanceCreator;
+
+        private HashSet<DiagnosticType>? suppressions;
+        private ParameterDictionary<OverriddenParameter>? overriddenParameters;
+        private Action<object>? instanceInitializer;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Registration"/> class.
         /// </summary>
         /// <param name="lifestyle">The <see cref="Lifestyle"/> this that created this registration.</param>
         /// <param name="container">The <see cref="Container"/> instance for this registration.</param>
+        /// <param name="implementationType">The type of instance that will be created.</param>
+        /// <param name="instanceCreator">
+        /// The optional delegate supplied by the user that allows building or creating new instances.
+        /// If this argument is supplied, the <see cref="Expression"/> and <see cref="Func{T}"/> instances
+        /// build by this <see cref="Registration"/> instance wrap that delegate. When the delegate is omitted,
+        /// the built expressions and delegates invoke the <paramref name="implementationType"/>'s constructor.
+        /// </param>
         /// <exception cref="ArgumentNullException">Thrown when one of the supplied arguments is a null
-        /// reference (Nothing in VB).</exception>
-        protected Registration(Lifestyle lifestyle, Container container)
+        /// reference.</exception>
+        protected Registration(
+            Lifestyle lifestyle,
+            Container container,
+            Type implementationType,
+            Func<object>? instanceCreator = null)
         {
             Requires.IsNotNull(lifestyle, nameof(lifestyle));
             Requires.IsNotNull(container, nameof(container));
+            Requires.IsNotNull(implementationType, nameof(implementationType));
 
             this.Lifestyle = lifestyle;
             this.Container = container;
+            this.ImplementationType = implementationType;
+            this.instanceCreator = instanceCreator;
         }
 
         /// <summary>Gets the type that this instance will create.</summary>
         /// <value>The type that this instance will create.</value>
-        public abstract Type ImplementationType { get; }
+        public Type ImplementationType { get; }
 
         /// <summary>Gets the <see cref="Lifestyle"/> this that created this registration.</summary>
         /// <value>The <see cref="Lifestyle"/> this that created this registration.</value>
@@ -85,11 +82,26 @@ namespace SimpleInjector
         /// <value>The <see cref="Container"/> instance for this registration.</value>
         public Container Container { get; }
 
+        /// <summary>
+        /// Gets or sets a value indicating whether the disposal of created instances for this registration
+        /// should be suppressed or not. The default is false. Having a value of false, does not force an
+        /// instance to be disposed of, though; Transient instances, for instance, will never be disposed of.
+        /// </summary>
+        /// <value>
+        /// Gets or sets a value indicating whether the disposal of created instances for this registration
+        /// should be suppressed or not.
+        /// </value>
+        public bool SuppressDisposal { get; set; }
+
         internal bool IsCollection { get; set; }
+
+        internal bool? ExpressionIntercepted { get; private set; }
 
         internal virtual bool MustBeVerified => false;
 
-        /// <summary>Gets or sets a value indicating whether this registration object contains a user 
+        internal virtual bool ResolvesExternallyOwnedInstance => false;
+
+        /// <summary>Gets or sets a value indicating whether this registration object contains a user
         /// supplied instanceCreator factory delegate.</summary>
         internal bool WrapsInstanceCreationDelegate { get; set; }
 
@@ -117,17 +129,17 @@ namespace SimpleInjector
         /// <see cref="IPropertySelectionBehavior"/>) and by applying any initializers.
         /// </remarks>
         /// <param name="instance">The instance to initialize.</param>
-        /// <exception cref="ArgumentNullException">Thrown when <paramref name="instance"/> is a null reference
-        /// (Nothing in VB).</exception>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="instance"/> is a null
+        /// reference.</exception>
         /// <exception cref="ArgumentException">Thrown when the supplied <paramref name="instance"/> is not
         /// of type <see cref="ImplementationType"/>.</exception>
         public void InitializeInstance(object instance)
         {
             Requires.IsNotNull(instance, nameof(instance));
-            Requires.ServiceIsAssignableFromImplementation(this.ImplementationType, instance.GetType(),
-                nameof(instance));
+            Requires.ServiceIsAssignableFromImplementation(
+                this.ImplementationType, instance.GetType(), nameof(instance));
 
-            if (this.instanceInitializer == null)
+            if (this.instanceInitializer is null)
             {
                 this.instanceInitializer = this.BuildInstanceInitializer();
             }
@@ -140,7 +152,7 @@ namespace SimpleInjector
         /// </summary>
         /// <param name="type">The <see cref="DiagnosticType"/>.</param>
         /// <param name="justification">The justification of why the warning must be suppressed.</param>
-        /// <exception cref="ArgumentNullException">Thrown when <paramref name="justification"/> is a null  
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="justification"/> is a null
         /// reference.</exception>
         /// <exception cref="ArgumentException">Thrown when either <paramref name="justification"/> is an
         /// empty string or when <paramref name="type"/> is not a valid value of <see cref="DiagnosticType"/>.
@@ -150,7 +162,7 @@ namespace SimpleInjector
             Requires.IsValidEnum(type, nameof(type));
             Requires.IsNotNullOrEmpty(justification, nameof(justification));
 
-            if (this.suppressions == null)
+            if (this.suppressions is null)
             {
                 this.suppressions = new HashSet<DiagnosticType>();
             }
@@ -158,8 +170,7 @@ namespace SimpleInjector
             this.suppressions.Add(type);
         }
 
-        internal bool ShouldNotBeSuppressed(DiagnosticType type) =>
-            this.suppressions == null || !this.suppressions.Contains(type);
+        internal bool ShouldNotBeSuppressed(DiagnosticType type) => this.suppressions?.Contains(type) != true;
 
         internal virtual KnownRelationship[] GetRelationshipsCore()
         {
@@ -182,10 +193,15 @@ namespace SimpleInjector
             }
         }
 
-        internal Expression InterceptInstanceCreation(Type implementationType,
-            Expression instanceCreatorExpression)
+        internal Expression InterceptInstanceCreation(
+            Type implementationType, Expression instanceCreatorExpression)
         {
-            return this.Container.OnExpressionBuilding(this, implementationType, instanceCreatorExpression);
+            var interceptedExpression =
+                this.Container.OnExpressionBuilding(this, implementationType, instanceCreatorExpression);
+
+            this.ExpressionIntercepted = interceptedExpression != instanceCreatorExpression;
+
+            return interceptedExpression;
         }
 
         internal void AddRelationship(KnownRelationship relationship)
@@ -226,7 +242,7 @@ namespace SimpleInjector
 
         internal Expression WrapWithInitializer(Type implementationType, Expression expression)
         {
-            Action<object> initializer = this.Container.GetInitializer(implementationType, this);
+            Action<object>? initializer = this.Container.GetInitializer(implementationType, this);
 
             if (initializer != null)
             {
@@ -239,47 +255,11 @@ namespace SimpleInjector
         }
 
         /// <summary>
-        /// Builds a <see cref="Func{T}"/> delegate for the creation of the <typeparamref name="TService"/>
-        /// using the supplied <paramref name="instanceCreator"/>. The returned <see cref="Func{T}"/> might
-        /// be intercepted by a 
-        /// <see cref="SimpleInjector.Container.ExpressionBuilding">Container.ExpressionBuilding</see> event, 
-        /// and the <paramref name="instanceCreator"/> will have been wrapped with a delegate that executes the
-        /// registered <see cref="SimpleInjector.Container.RegisterInitializer{TService}">initializers</see> 
-        /// that are applicable to the given <typeparamref name="TService"/> (if any).
-        /// </summary>
-        /// <typeparam name="TService">The interface or base type that can be used to retrieve instances.</typeparam>
-        /// <param name="instanceCreator">
-        /// The delegate supplied by the user that allows building or creating new instances.</param>
-        /// <returns>A <see cref="Func{T}"/> delegate.</returns>
-        /// <exception cref="ArgumentNullException">Thrown when one of the arguments is a null reference.</exception>
-        protected Func<TService> BuildTransientDelegate<TService>(Func<TService> instanceCreator)
-            where TService : class
-        {
-            Requires.IsNotNull(instanceCreator, nameof(instanceCreator));
-
-            try
-            {
-                Expression expression = this.BuildTransientExpression(instanceCreator);
-
-                // NOTE: The returned delegate could still return null (caused by the ExpressionBuilding event),
-                // but I don't feel like protecting us against such an obscure user bug.
-                return (Func<TService>)this.BuildDelegate(expression);
-            }
-            catch (CyclicDependencyException ex)
-            {
-                ex.AddTypeToCycle(this.ImplementationType);
-                throw;
-            }
-        }
-
-        /// <summary>
-        /// Builds a <see cref="Func{T}"/> delegate for the creation of <see cref="ImplementationType"/>.
-        /// The returned <see cref="Func{T}"/> might be intercepted by a 
-        /// <see cref="SimpleInjector.Container.ExpressionBuilding">Container.ExpressionBuilding</see> event, 
-        /// and the creation of the <see cref="ImplementationType"/> will have been wrapped with a 
-        /// delegate that executes the registered 
-        /// <see cref="SimpleInjector.Container.RegisterInitializer{TService}">initializers</see> 
-        /// that are applicable to the given <see cref="ImplementationType"/> (if any).
+        /// Builds a <see cref="Func{T}"/> delegate for the creation of the <see cref="ImplementationType"/>.
+        /// The returned <see cref="Func{T}"/> might be intercepted by a
+        /// <see cref="SimpleInjector.Container.ExpressionBuilding">Container.ExpressionBuilding</see> event,
+        /// and initializers (if any) (<see cref="SimpleInjector.Container.RegisterInitializer{TService}"/>)
+        /// will be applied.
         /// </summary>
         /// <returns>A <see cref="Func{T}"/> delegate.</returns>
         /// <exception cref="ArgumentNullException">Thrown when one of the arguments is a null reference.</exception>
@@ -289,6 +269,8 @@ namespace SimpleInjector
             {
                 Expression expression = this.BuildTransientExpression();
 
+                // NOTE: The returned delegate could still return null (caused by the ExpressionBuilding event),
+                // but I don't feel like protecting us against such an obscure user bug.
                 return (Func<object>)this.BuildDelegate(expression);
             }
             catch (CyclicDependencyException ex)
@@ -299,64 +281,28 @@ namespace SimpleInjector
         }
 
         /// <summary>
-        /// Builds an <see cref="Expression"/> that describes the creation of the <typeparamref name="TService"/>
-        /// using the supplied <paramref name="instanceCreator"/>. The returned <see cref="Expression"/> might
-        /// be intercepted by a 
-        /// <see cref="SimpleInjector.Container.ExpressionBuilding">Container.ExpressionBuilding</see> event, 
-        /// and the <paramref name="instanceCreator"/> will have been wrapped with a delegate that executes the
-        /// registered <see cref="SimpleInjector.Container.RegisterInitializer">initializers</see> that are 
-        /// applicable to the given <typeparamref name="TService"/> (if any).
+        /// Builds an <see cref="Expression"/> that describes the creation of <see cref="ImplementationType"/>.
+        /// The returned <see cref="Expression"/> might be intercepted by a
+        /// <see cref="SimpleInjector.Container.ExpressionBuilding">Container.ExpressionBuilding</see> event,
+        /// and initializers (if any) (<see cref="SimpleInjector.Container.RegisterInitializer"/>) can be
+        /// applied.
         /// </summary>
-        /// <typeparam name="TService">The interface or base type that can be used to retrieve instances.</typeparam>
-        /// <param name="instanceCreator">
-        /// The delegate supplied by the user that allows building or creating new instances.</param>
-        /// <returns>An <see cref="Expression"/>.</returns>
-        /// <exception cref="ArgumentNullException">Thrown when one of the arguments is a null reference.</exception>
-        protected Expression BuildTransientExpression<TService>(Func<TService> instanceCreator)
-            where TService : class
-        {
-            Requires.IsNotNull(instanceCreator, nameof(instanceCreator));
-
-            try
-            {
-                Expression expression = Expression.Invoke(Expression.Constant(instanceCreator));
-
-                expression = WrapWithNullChecker<TService>(expression);
-                expression = this.WrapWithPropertyInjector(typeof(TService), expression);
-                expression = this.InterceptInstanceCreation(typeof(TService), expression);
-                expression = this.WrapWithInitializer(typeof(TService), expression);
-
-                return expression;
-            }
-            catch (CyclicDependencyException ex)
-            {
-                ex.AddTypeToCycle(this.ImplementationType);
-                throw;
-            }
-        }
-
-        /// <summary>
-        /// Builds an <see cref="Expression"/> that describes the creation of <see cref="ImplementationType"/>. 
-        /// The returned <see cref="Expression"/> might be intercepted
-        /// by a <see cref="SimpleInjector.Container.ExpressionBuilding">Container.ExpressionBuilding</see>
-        /// event, and the creation of the <see cref="ImplementationType"/> will have been wrapped with
-        /// a delegate that executes the registered 
-        /// <see cref="SimpleInjector.Container.RegisterInitializer">initializers</see> that are applicable 
-        /// to the InstanceProducer's <see cref="InstanceProducer.ServiceType">ServiceType</see> (if any).
-        /// </summary>
-        /// <returns>An <see cref="Expression"/>.</returns>
-        /// <exception cref="ArgumentNullException">Thrown when one of the arguments is a null reference.</exception>
+        /// <exception cref="ArgumentNullException">Thrown when one of the arguments is a null reference.
+        /// </exception>
         protected Expression BuildTransientExpression()
         {
             try
             {
-                Expression expression = this.BuildNewExpression();
+                Expression expression = this.instanceCreator is null
+                    ? this.BuildNewExpression()
+                    : this.BuildInvocationExpression(this.instanceCreator);
 
                 expression = this.WrapWithPropertyInjector(this.ImplementationType, expression);
                 expression = this.InterceptInstanceCreation(this.ImplementationType, expression);
                 expression = this.WrapWithInitializer(this.ImplementationType, expression);
+                expression = this.ReplacePlaceHoldersWithOverriddenParameters(expression);
 
-                return this.ReplacePlaceHoldersWithOverriddenParameters(expression);
+                return expression;
             }
             catch (CyclicDependencyException ex)
             {
@@ -375,7 +321,7 @@ namespace SimpleInjector
 
             Expression expression = castedParameter;
 
-            expression = this.WrapWithPropertyInjector(type, castedParameter);
+            expression = this.WrapWithPropertyInjector(type, expression);
             expression = this.InterceptInstanceCreation(type, expression);
 
             // NOTE: We can't wrap with the instance created callback, since the InitializeInstance is called
@@ -407,6 +353,21 @@ namespace SimpleInjector
             return expression;
         }
 
+        private Expression BuildInvocationExpression(Func<object> instanceCreator)
+        {
+            Expression expression = Expression.Invoke(Expression.Constant(instanceCreator));
+
+            var funcType = typeof(Func<>).MakeGenericType(this.ImplementationType);
+
+            if (!funcType.IsAssignableFrom(instanceCreator.GetType()))
+            {
+                // The supplied Func<T> is not a Func{ImplementationType}, which means it needs a cast.
+                expression = Expression.Convert(expression, this.ImplementationType);
+            }
+
+            return this.WrapWithNullCheck(expression);
+        }
+
         private ParameterDictionary<DependencyData> BuildConstructorParameters(ConstructorInfo constructor)
         {
             // NOTE: We used to use a LINQ query here (which is cleaner code), but we reverted back to using
@@ -419,9 +380,9 @@ namespace SimpleInjector
             {
                 var consumer = new InjectionConsumerInfo(parameter);
                 Expression expression = this.GetPlaceHolderFor(parameter);
-                InstanceProducer producer = null;
+                InstanceProducer? producer = null;
 
-                if (expression == null)
+                if (expression is null)
                 {
                     producer = this.Container.Options.GetInstanceProducerFor(consumer);
                     expression = producer.BuildExpression();
@@ -436,12 +397,12 @@ namespace SimpleInjector
         private ConstantExpression GetPlaceHolderFor(ParameterInfo parameter) =>
             this.GetOverriddenParameterFor(parameter).PlaceHolder;
 
-        private Expression WrapWithPropertyInjectorInternal(Type implementationType,
-            Expression expressionToWrap)
+        private Expression WrapWithPropertyInjectorInternal(
+            Type implementationType, Expression expressionToWrap)
         {
             PropertyInfo[] properties = this.GetPropertiesToInject(implementationType);
 
-            if (properties.Any())
+            if (properties.Length > 0)
             {
                 PropertyInjectionHelper.VerifyProperties(properties);
 
@@ -450,7 +411,18 @@ namespace SimpleInjector
 
                 expressionToWrap = data.Expression;
 
-                this.AddRelationships(implementationType, data.Producers);
+                var knownRelationships =
+                    from pair in data.Producers.Zip(data.Properties, (prod, prop) => new { prod, prop })
+                    select new KnownRelationship(
+                        implementationType: implementationType,
+                        lifestyle: this.Lifestyle,
+                        consumer: new InjectionConsumerInfo(implementationType, pair.prop!),
+                        dependency: pair.prod!);
+
+                foreach (var knownRelationship in knownRelationships)
+                {
+                    this.AddRelationship(knownRelationship);
+                }
             }
 
             return expressionToWrap;
@@ -486,45 +458,52 @@ namespace SimpleInjector
 
         private OverriddenParameter GetOverriddenParameterFor(ParameterInfo parameter)
         {
-            if (this.overriddenParameters != null)
+            if (this.overriddenParameters != null
+                && this.overriddenParameters.TryGetValue(parameter, out OverriddenParameter p))
             {
-                OverriddenParameter overriddenParameter;
-
-                if (this.overriddenParameters.TryGetValue(parameter, out overriddenParameter))
-                {
-                    return overriddenParameter;
-                }
+                return p;
             }
-
-            return new OverriddenParameter();
-        }
-
-        private void AddRelationships(Type implementationType, IEnumerable<InstanceProducer> dependencies)
-        {
-            var relationships =
-                from dependency in dependencies
-                select new KnownRelationship(implementationType, this.Lifestyle, dependency);
-
-            foreach (var relationship in relationships)
+            else
             {
-                this.AddRelationship(relationship);
+                return default;
             }
         }
 
-        private void AddRelationships(ConstructorInfo constructor, ParameterDictionary<DependencyData> parameters)
+        private void AddRelationships(
+            ConstructorInfo constructor, ParameterDictionary<DependencyData> parameters)
         {
             var knownRelationships =
                 from dependency in parameters.Values
-                select dependency.Producer ?? this.GetOverriddenParameterFor(dependency.Parameter).Producer;
+                let producer = dependency.Producer
+                    ?? this.GetOverriddenParameterFor(dependency.Parameter).Producer
+                select new KnownRelationship(
+                    implementationType: constructor.DeclaringType,
+                    lifestyle: this.Lifestyle,
+                    consumer: new InjectionConsumerInfo(dependency.Parameter),
+                    dependency: producer);
 
-            this.AddRelationships(constructor.DeclaringType, knownRelationships);
+            foreach (var knownRelationship in knownRelationships)
+            {
+                this.AddRelationship(knownRelationship);
+            }
         }
 
-        private static Expression WrapWithNullChecker<TService>(Expression expression) where TService : class
+        private Expression WrapWithNullCheck(Expression expression)
         {
-            Func<TService, TService> nullChecker = ThrowWhenNull<TService>;
+            if (expression.Type.IsValueType())
+            {
+                return expression;
+            }
 
-            return Expression.Invoke(Expression.Constant(nullChecker), expression);
+            Func<object> thrower = () => throw new ActivationException(
+                StringResources.DelegateForTypeReturnedNull(this.ImplementationType));
+
+            // Build the follwoing expression: "instanceCreator() ?? thrower()"
+            return Expression.Coalesce(
+                left: expression,
+                right: Expression.Convert(
+                    Expression.Invoke(Expression.Constant(thrower)),
+                    this.ImplementationType));
         }
 
         private static Expression BuildExpressionWithInstanceInitializer<TImplementation>(
@@ -545,7 +524,7 @@ namespace SimpleInjector
         {
             try
             {
-                return CompilationHelpers.CompileExpression(this.ImplementationType, this.Container, expression);
+                return CompilationHelpers.CompileExpression(this.Container, expression);
             }
             catch (Exception ex)
             {
@@ -556,23 +535,13 @@ namespace SimpleInjector
             }
         }
 
-        private static TService ThrowWhenNull<TService>(TService instance) where TService : class
-        {
-            if (instance == null)
-            {
-                throw new ActivationException(StringResources.DelegateForTypeReturnedNull(typeof(TService)));
-            }
-
-            return instance;
-        }
-
         private struct DependencyData
         {
             public readonly ParameterInfo Parameter;
-            public readonly InstanceProducer Producer;
+            public readonly InstanceProducer? Producer;
             public readonly Expression Expression;
 
-            public DependencyData(ParameterInfo parameter, Expression expression, InstanceProducer producer)
+            public DependencyData(ParameterInfo parameter, Expression expression, InstanceProducer? producer)
             {
                 this.Parameter = parameter;
                 this.Expression = expression;

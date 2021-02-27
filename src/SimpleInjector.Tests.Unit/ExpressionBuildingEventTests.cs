@@ -2,6 +2,7 @@
 {
     using System;
     using System.Collections.Generic;
+    using System.Collections.ObjectModel;
     using System.Linq;
     using System.Linq.Expressions;
     using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -501,7 +502,8 @@
             var eventArgs = new ExpressionBuildingEventArgs(
                 typeof(PluginImpl),
                 Expression.Constant(new PluginImpl()),
-                Lifestyle.Transient);
+                Lifestyle.Transient,
+                new Collection<KnownRelationship>());
 
             // Act
             Action action = () => eventArgs.Expression = null;
@@ -555,9 +557,9 @@
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<ActivationException>(@"
                 You are trying to set the ExpressionBuildingEventArgs.Expression property with an Expression
-                instance that has a type of String. The expression type however should be a 
+                instance that has a type of string. The expression type however should be a
                 SqlUserRepository (or a sub type). You can't change the type of the expression using the
-                ExpressionBuilding event. If you need to change the implementation, please use the 
+                ExpressionBuilding event. If you need to change the implementation, please use the
                 ExpressionBuilt event instead."
                 .TrimInside(),
                 action);

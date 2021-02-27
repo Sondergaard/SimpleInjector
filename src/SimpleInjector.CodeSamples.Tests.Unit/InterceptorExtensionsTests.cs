@@ -157,9 +157,7 @@
 
             container.Register<ICommand, FakeCommand>();
 
-            container.Register<FakeInterceptor>(Lifestyle.Singleton);
-
-            container.InterceptWith<FakeInterceptor>(IsACommandPredicate);
+            container.InterceptWith<FakeInterceptor>(Lifestyle.Singleton, IsACommandPredicate);
 
             // Act
             var command1 = container.GetInstance<ICommand>();
@@ -200,7 +198,7 @@
 
             container.Register<FakeInterceptor>(Lifestyle.Singleton);
 
-            container.InterceptWith<FakeInterceptor>(IsACommandPredicate);
+            container.InterceptWith<FakeInterceptor>(Lifestyle.Singleton, IsACommandPredicate);
 
             // Act
             var command1 = container.GetInstance<ICommand>();
@@ -219,6 +217,8 @@
             var logger = new FakeLogger();
 
             var container = ContainerFactory.New();
+
+            container.Register<CommandThatLogsOnExecute>();
 
             container.RegisterInstance<ILogger>(logger);
 
@@ -484,8 +484,10 @@
 
             container.Register<ICommand, FakeCommand>();
 
+            container.InterceptWith<InterceptorWithInternalConstructor>(IsACommandPredicate);
+
             // Act
-            Action action = () => container.InterceptWith<InterceptorWithInternalConstructor>(IsACommandPredicate);
+            Action action = () => container.GetInstance<ICommand>();
 
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<ActivationException>(
@@ -518,7 +520,7 @@
             {
                 Assert.IsTrue(ex.Message.Contains("The constructor of type " +
                     "InterceptorExtensionsTests.InterceptorWithDependencyOnLogger contains the parameter " +
-                    "with name 'logger' and type ILogger that is not registered."),
+                    "with name 'logger' and type ILogger, but ILogger is not registered."),
                     "Actual: " + ex.Message);
             }
         }
@@ -626,7 +628,7 @@
         [TestMethod]
         public void CallingAnInterceptedMethod_InterceptorThatChangesTheInputParameters_GetsForwardedToTheInterceptee()
         {
-            // Arrange  
+            // Arrange
             string expectedValue = "XYZ";
 
             var container = new Container();
@@ -657,7 +659,7 @@
         [TestMethod]
         public void CallingAnInterceptedMethod_InterceptorThatChangesAnOutputParameter_OutputParameterFlowsBackToTheCaller()
         {
-            // Arrange  
+            // Arrange
             string expectedOutValue = "KLM";
 
             var container = new Container();

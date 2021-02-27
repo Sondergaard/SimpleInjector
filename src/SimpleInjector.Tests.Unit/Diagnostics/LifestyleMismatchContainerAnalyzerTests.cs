@@ -208,8 +208,8 @@
             Assert.AreEqual(1, results.Length, Actual(results));
 
             Assert.AreEqual(
-                "CommandHandlerDecorator<Int32> (Singleton) depends on ICommandHandler<Int32> implemented " +
-                "by NullCommandHandler<Int32> (Transient).",
+                "CommandHandlerDecorator<int> (Singleton) depends on ICommandHandler<int> implemented " +
+                "by NullCommandHandler<int> (Transient).",
                 results.Single().Description);
         }
 
@@ -239,8 +239,8 @@
             Assert.AreEqual(1, results.Length, Actual(results));
 
             Assert.AreEqual(
-                "CommandHandlerDecorator<Int32> (Singleton) depends on ICommandHandler<Int32> implemented " +
-                "by NullCommandHandler<Int32> (Transient).",
+                "CommandHandlerDecorator<int> (Singleton) depends on ICommandHandler<int> implemented " +
+                "by NullCommandHandler<int> (Transient).",
                 results.Single().Description);
         }
 
@@ -260,7 +260,7 @@
 
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<DiagnosticVerificationException>(
-                "CommandHandlerDecorator<Int32> (Singleton) depends on ICommandHandler<Int32>",
+                "CommandHandlerDecorator<int> (Singleton) depends on ICommandHandler<int>",
                 action);
         }
 
@@ -280,7 +280,7 @@
 
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<ActivationException>(
-                "CommandHandlerDecorator<Int32> (Singleton) depends on ICommandHandler<Int32>",
+                "CommandHandlerDecorator<int> (Singleton) depends on ICommandHandler<int>",
                 action);
         }
 
@@ -289,7 +289,7 @@
         {
             // Arrange
             var container = new Container();
-
+            container.Options.EnableAutoVerification = false;
             container.Options.SuppressLifestyleMismatchVerification = true;
 
             container.Register(typeof(ICommandHandler<int>), typeof(NullCommandHandler<int>), Lifestyle.Transient);
@@ -306,7 +306,7 @@
         public void GetInstance_ResolvingcTypeWithLifestyleMismatchInGraph_ThrowsException()
         {
             // Arrange
-            var container = new Container();
+            var container = ContainerFactory.New();
 
             container.Register<ServiceWithDependency<ServiceDependingOn<ILogger>>>(Lifestyle.Transient);
             container.Register<ServiceDependingOn<ILogger>>(Lifestyle.Singleton);
@@ -317,7 +317,7 @@
 
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<ActivationException>(
-                "lifestyle mismatch is encountered",
+                "lifestyle mismatch",
                 action);
         }
 
@@ -332,13 +332,13 @@
             container.Register<ILogger, NullLogger>(Lifestyle.Transient);
 
             // Act
-            // Resolve graph: 
+            // Resolve graph:
             // ServiceWithDependency<T> (Transient) -> ServiceDependingOn<T> (Singleton) -> NullLogger (Transient)
             Action action = () => container.GetInstance(typeof(ServiceWithDependency<ServiceDependingOn<ILogger>>));
 
             // Assert
             AssertThat.ThrowsWithExceptionMessageContains<ActivationException>(
-                "lifestyle mismatch is encountered",
+                "lifestyle mismatch has been detected",
                 action);
         }
 

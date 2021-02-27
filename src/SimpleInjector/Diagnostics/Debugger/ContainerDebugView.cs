@@ -1,24 +1,5 @@
-﻿#region Copyright Simple Injector Contributors
-/* The Simple Injector is an easy-to-use Inversion of Control library for .NET
- * 
- * Copyright (c) 2013 Simple Injector Contributors
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and 
- * associated documentation files (the "Software"), to deal in the Software without restriction, including 
- * without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell 
- * copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the 
- * following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in all copies or substantial 
- * portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT 
- * LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO 
- * EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER 
- * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE 
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
-*/
-#endregion
+﻿// Copyright (c) Simple Injector Contributors. All rights reserved.
+// Licensed under the MIT License. See LICENSE file in the project root for license information.
 
 namespace SimpleInjector.Diagnostics.Debugger
 {
@@ -27,14 +8,13 @@ namespace SimpleInjector.Diagnostics.Debugger
     using System.Diagnostics;
     using System.Diagnostics.CodeAnalysis;
     using System.Linq;
-    using System.Reflection;
     using SimpleInjector.Diagnostics.Analyzers;
-    
+
     internal sealed class ContainerDebugView
     {
         [DebuggerBrowsable(DebuggerBrowsableState.Never)]
         private readonly Container container;
-        
+
         public ContainerDebugView(Container container)
         {
             this.container = container;
@@ -46,12 +26,12 @@ namespace SimpleInjector.Diagnostics.Debugger
 
         [DebuggerDisplay("")]
         [DebuggerBrowsable(DebuggerBrowsableState.RootHidden)]
-        public DebuggerViewItem[] Items { get; private set; }
+        public DebuggerViewItem[]? Items { get; private set; }
 
         [SuppressMessage("Microsoft.Design", "CA1031:DoNotCatchGeneralExceptionTypes",
             Justification = @"
-                We must catch all exceptions here, because this constructor is called by the Visual Studio 
-                debugger and it won't hide any failure in case of an exception. We catch and show the 
+                We must catch all exceptions here, because this constructor is called by the Visual Studio
+                debugger and it won't hide any failure in case of an exception. We catch and show the
                 exception in the debug view instead.")]
         private void Initialize()
         {
@@ -61,7 +41,7 @@ namespace SimpleInjector.Diagnostics.Debugger
                 {
                     new DebuggerViewItem(
                         name: "How To View Diagnostic Info",
-                        description: "Analysis info is available in this debug view after Verify() is " + 
+                        description: "Analysis info is available in this debug view after Verify() is " +
                             "called on this container instance.")
                 };
 
@@ -100,16 +80,16 @@ namespace SimpleInjector.Diagnostics.Debugger
 
         private static DebuggerViewItem[] GetDebuggerTypeProxyFailureResults(Exception exception)
         {
-            return new[] 
+            return new[]
             {
                 new DebuggerViewItem(
-                    "Failure", 
-                    "We're so so sorry. The Debugger Type Proxy failed to initialize.", 
+                    "Failure",
+                    "We're so so sorry. The Debugger Type Proxy failed to initialize.",
                     exception)
             };
         }
 
-        private object[] GroupProducers(IEnumerable<InstanceProducer> producers) => 
+        private object[] GroupProducers(IEnumerable<InstanceProducer> producers) =>
             this.GroupProducers(producers, level: 0);
 
         private object[] GroupProducers(IEnumerable<InstanceProducer> producers, int level) => (
@@ -119,8 +99,8 @@ namespace SimpleInjector.Diagnostics.Debugger
             select this.BuildProducerGroup(resultGroup.Key, resultGroup.ToArray(), level + 1))
             .ToArray();
 
-        private object BuildProducerGroup(Type groupType, 
-            InstanceProducer[] producersForGroup, int level)
+        private object BuildProducerGroup(
+            Type groupType, InstanceProducer[] producersForGroup, int level)
         {
             if (producersForGroup.Length == 1)
             {
@@ -132,8 +112,7 @@ namespace SimpleInjector.Diagnostics.Debugger
                     description: producer.DebuggerDisplay,
                     value: producersForGroup[0]);
             }
-
-            if (groupType.ContainsGenericParameters())
+            else if (groupType.ContainsGenericParameters())
             {
                 return this.BuildGenericGroup(groupType, producersForGroup, level);
             }
@@ -143,8 +122,8 @@ namespace SimpleInjector.Diagnostics.Debugger
             }
         }
 
-        private object BuildGenericGroup(Type groupType, 
-            InstanceProducer[] producersForGroup, int level)
+        private object BuildGenericGroup(
+            Type groupType, InstanceProducer[] producersForGroup, int level)
         {
             object[] childGroups = this.GroupProducers(producersForGroup, level);
 
@@ -160,7 +139,8 @@ namespace SimpleInjector.Diagnostics.Debugger
                 value: childGroups);
         }
 
-        private static DebuggerViewItem BuildNonGenericGroup(Type closedType, InstanceProducer[] producersForGroup) => 
+        private static DebuggerViewItem BuildNonGenericGroup(
+            Type closedType, InstanceProducer[] producersForGroup) =>
             new DebuggerViewItem(
                 name: closedType.ToFriendlyName(),
                 description: "Count = " + producersForGroup.Length,

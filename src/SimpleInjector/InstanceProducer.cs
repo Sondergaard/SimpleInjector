@@ -1,24 +1,5 @@
-﻿#region Copyright Simple Injector Contributors
-/* The Simple Injector is an easy-to-use Inversion of Control library for .NET
- * 
- * Copyright (c) 2013 - 2014 Simple Injector Contributors
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and 
- * associated documentation files (the "Software"), to deal in the Software without restriction, including 
- * without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell 
- * copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the 
- * following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in all copies or substantial 
- * portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT 
- * LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO 
- * EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER 
- * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE 
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
-*/
-#endregion
+﻿// Copyright (c) Simple Injector Contributors. All rights reserved.
+// Licensed under the MIT License. See LICENSE file in the project root for license information.
 
 namespace SimpleInjector
 {
@@ -39,45 +20,45 @@ namespace SimpleInjector
     /// <summary>
     /// Produces instances for a given registration. Instances of this type are generally created by the
     /// container when calling one of the <b>Register</b> overloads. Instances can be retrieved by calling
-    /// <see cref="SimpleInjector.Container.GetCurrentRegistrations()">GetCurrentRegistrations()</see> or 
-    /// <see cref="SimpleInjector.Container.GetRegistration(Type, bool)">GetRegistration(Type, bool)</see>.
+    /// <see cref="Container.GetCurrentRegistrations()">GetCurrentRegistrations()</see> or
+    /// <see cref="Container.GetRegistration(Type, bool)">GetRegistration(Type, bool)</see>.
     /// </summary>
     /// <remarks>
     /// The <b>Register</b> method overloads create <b>InstanceProducer</b> instances internally, but
-    /// <b>InstanceProducer</b>s can be created manually to implement special scenarios. An 
+    /// <b>InstanceProducer</b>s can be created manually to implement special scenarios. An
     /// <b>InstanceProducer</b> wraps <see cref="Registration"/> instance. The <b>Registration</b> builds an
     /// <see cref="Expression"/> that describes the intend to create the instance according to a certain
     /// lifestyle. The <b>InstanceProducer</b> on the other hand transforms this <b>Expression</b> to a
     /// delegate and allows the actual instance to be created. A <b>Registration</b> itself can't create any
     /// instance. The <b>InsanceProducer</b> allows intercepting created instances by hooking onto the
-    /// <see cref="SimpleInjector.Container.ExpressionBuilt">Container.ExpressionBuilt</see> event. The
-    /// <see cref="SimpleInjector.Container.RegisterDecorator(Type, Type)">RegisterDecorator</see> methods for 
-    /// instance work by hooking onto the <b>ExpressionBuilt</b> event and allow wrapping the returned instance 
+    /// <see cref="Container.ExpressionBuilt">Container.ExpressionBuilt</see> event. The
+    /// <see cref="Container.RegisterDecorator(Type, Type)">RegisterDecorator</see> methods for
+    /// instance work by hooking onto the <b>ExpressionBuilt</b> event and allow wrapping the returned instance
     /// with a decorator.
     /// </remarks>
     /// <example>
     /// The following example shows the creation of two different <b>InstanceProducer</b> instances that wrap
-    /// the same <b>Registration</b> instance. Since the <b>Registration</b> is created using the 
-    /// <see cref="SimpleInjector.Lifestyle.Singleton">Singleton</see> lifestyle, both producers will return 
+    /// the same <b>Registration</b> instance. Since the <b>Registration</b> is created using the
+    /// <see cref="Lifestyle.Singleton">Singleton</see> lifestyle, both producers will return
     /// the same instance. The <b>InstanceProducer</b> for the <code>Interface1</code> however, will wrap that
     /// instance in a (transient) <code>Interface1Decorator</code>.
     /// <code lang="cs"><![CDATA[
     /// var container = new Container();
-    /// 
+    ///
     /// // ServiceImpl implements both Interface1 and Interface2.
     /// var registration = Lifestyle.Singleton.CreateRegistration<ServiceImpl, ServiceImpl>(container);
-    /// 
+    ///
     /// var producer1 = new InstanceProducer(typeof(Interface1), registration);
     /// var producer2 = new InstanceProducer(typeof(Interface2), registration);
-    /// 
+    ///
     /// container.RegisterDecorator(typeof(Interface1), typeof(Interface1Decorator));
-    /// 
+    ///
     /// var instance1 = (Interface1)producer1.GetInstance();
     /// var instance2 = (Interface2)producer2.GetInstance();
-    /// 
+    ///
     /// Assert.IsInstanceOfType(instance1, typeof(Interface1Decorator));
     /// Assert.IsInstanceOfType(instance2, typeof(ServiceImpl));
-    /// 
+    ///
     /// Assert.AreSame(((Interface1Decorator)instance1).DecoratedInstance, instance2);
     /// ]]></code>
     /// </example>
@@ -91,15 +72,15 @@ namespace SimpleInjector
         private static readonly Predicate<PredicateContext> Always = context => true;
 
         private readonly object locker = new object();
-        private readonly Lazy<Expression> lazyExpression;
+        private LazyEx<Expression> lazyExpression;
 
-        private CyclicDependencyValidator validator;
+        private CyclicDependencyValidator? validator;
         private Func<object> instanceCreator;
         private bool? isValid = true;
-        private Lifestyle overriddenLifestyle;
-        private ReadOnlyCollection<KnownRelationship> knownRelationships;
-        private List<Action<Scope>> verifiers;
-        private List<InstanceProducer> wrappedProducers;
+        private Lifestyle? overriddenLifestyle;
+        private ReadOnlyCollection<KnownRelationship>? knownRelationships;
+        private List<Action<Scope>>? verifiers;
+        private List<InstanceProducer>? wrappedProducers;
 
         /// <summary>Initializes a new instance of the <see cref="InstanceProducer"/> class.</summary>
         /// <param name="serviceType">The service type for which this instance is created.</param>
@@ -107,11 +88,10 @@ namespace SimpleInjector
         public InstanceProducer(Type serviceType, Registration registration)
             : this(serviceType, registration, ShouldBeRegisteredAsAnExternalProducer(registration))
         {
-            Requires.ServiceIsAssignableFromImplementation(serviceType, registration.ImplementationType,
-                nameof(serviceType));
         }
 
-        internal InstanceProducer(Type serviceType, Registration registration, Predicate<PredicateContext> predicate)
+        internal InstanceProducer(
+            Type serviceType, Registration registration, Predicate<PredicateContext>? predicate)
             : this(serviceType, registration)
         {
             this.Predicate = predicate ?? Always;
@@ -122,12 +102,14 @@ namespace SimpleInjector
             Requires.IsNotNull(serviceType, nameof(serviceType));
             Requires.IsNotNull(registration, nameof(registration));
             Requires.IsNotOpenGenericType(serviceType, nameof(serviceType));
+            Requires.ServiceIsAssignableFromImplementation(
+                serviceType, registration.ImplementationType, nameof(serviceType));
 
             this.ServiceType = serviceType;
             this.Registration = registration;
             this.validator = new CyclicDependencyValidator(this);
 
-            this.lazyExpression = new Lazy<Expression>(this.BuildExpressionInternal);
+            this.lazyExpression = new LazyEx<Expression>(this.BuildExpressionInternal);
 
             if (registerExternalProducer)
             {
@@ -135,6 +117,7 @@ namespace SimpleInjector
             }
 
             this.instanceCreator = this.BuildAndReplaceInstanceCreatorAndCreateFirstInstance;
+            this.ImplementationType = registration.ImplementationType;
         }
 
         // Flagging the registration with WrapsInstanceCreationDelegate prevents false diagnostic warnings.
@@ -149,7 +132,7 @@ namespace SimpleInjector
         /// <summary>
         /// Gets the <see cref="Lifestyle"/> for this registration. The returned lifestyle can differ from the
         /// lifestyle that is used during the registration. This can happen for instance when the registration
-        /// is changed by an <see cref="SimpleInjector.Container.ExpressionBuilt">ExpressionBuilt</see> 
+        /// is changed by an <see cref="Container.ExpressionBuilt">ExpressionBuilt</see>
         /// registration or gets decorated.
         /// </summary>
         /// <value>The <see cref="Lifestyle"/> for this registration.</value>
@@ -159,11 +142,39 @@ namespace SimpleInjector
         /// <value>A <see cref="Type"/> instance.</value>
         public Type ServiceType { get; }
 
-        /// <summary>Gets the <see cref="Registration"/> instance for this instance.</summary>
+        /// <summary>Gets the <see cref="Registration"/> instance for this instance.
+        /// Please note that, when decorators are applied, this instance is replaces and will become the
+        /// registration for the outermost decorator.</summary>
         /// <value>The <see cref="Registration"/>.</value>
         public Registration Registration { get; private set; }
 
-        internal Type ImplementationType => this.Registration.ImplementationType ?? this.ServiceType;
+        /// <summary>
+        /// Gets the originally registered implementation type. Note that the actual type, returned by
+        /// <see cref="GetInstance"/>, will be different from <see cref="ImplementationType"/> when
+        /// decorators or interceptors are applied. This property will always return the originally registered
+        /// implementation type. In case the implementation type is unknown, which happens for instance when
+        /// registering <see cref="Func{TResult}"/> delegates, the service type is returned.
+        /// </summary>
+        /// <example>
+        /// Given the configuration below, the Assert calls will succeed.
+        /// <code lang="cs"><![CDATA[
+        /// var container = new Container();
+        ///
+        /// container.Register<ILogger, ConsoleLogger>();
+        /// container.RegisterDecorator<ILogger, LoggerDecorator>();
+        ///
+        /// var producer = container.GetRegistration(typeof(ILogger));
+        ///
+        /// Assert.AreEqual(typeof(ConsoleLogger), producer.ImplementationType);
+        /// Assert.AreEqual(typeof(ConsoleLogger), producer.Registration.ImplementationType, "Before GetInstance");
+        /// Assert.AreEqual(typeof(LoggerDecorator), producer.GetInstance().GetType());
+        /// Assert.AreEqual(typeof(LoggerDecorator), producer.Registration.ImplementationType, "After GetInstance");
+        /// ]]></code>
+        /// </example>
+        /// <value>The originally registered implementation type.</value>
+        public Type ImplementationType { get; }
+
+        internal Type FinalImplementationType => this.Registration.ImplementationType;
 
         internal Container Container => this.Registration.Container;
 
@@ -180,10 +191,10 @@ namespace SimpleInjector
         {
             get
             {
-                if (this.isValid == null)
+                if (this.isValid is null)
                 {
                     this.Exception = this.GetExceptionIfInvalid();
-                    this.isValid = this.Exception == null;
+                    this.isValid = this.Exception is null;
                 }
 
                 return this.isValid.GetValueOrDefault();
@@ -192,9 +203,8 @@ namespace SimpleInjector
 
         // Gets set by the IsValid and indicates the reason why this producer is invalid. Will be null
         // when the producer is valid.
-        internal Exception Exception { get; private set; }
+        internal Exception? Exception { get; private set; }
 
-        // Will never return null.
         internal Predicate<PredicateContext> Predicate { get; } = Always;
 
         internal bool IsDecorated { get; set; }
@@ -211,18 +221,21 @@ namespace SimpleInjector
 
         internal bool VerifiersAreSuccessfullyCalled { get; private set; }
 
-        internal string DebuggerDisplay => string.Format(CultureInfo.InvariantCulture,
+        internal string DebuggerDisplay => string.Format(
+            CultureInfo.InvariantCulture,
             "{0} = {1}, {2} = {3}",
-            nameof(this.ServiceType), this.ServiceType.ToFriendlyName(),
-            nameof(this.Lifestyle), this.Lifestyle.Name);
+            nameof(this.ServiceType),
+            this.ServiceType.ToFriendlyName(),
+            nameof(this.Lifestyle),
+            this.Lifestyle.Name);
 
         internal IEnumerable<InstanceProducer> SelfAndWrappedProducers =>
-            this.wrappedProducers == null ? this.Self : this.wrappedProducers.Concat(this.Self);
+            this.wrappedProducers is null ? this.Self : this.wrappedProducers.Concat(this.Self);
 
         private IEnumerable<InstanceProducer> Self => new[] { this };
 
         /// <summary>
-        /// Creates a new <see cref="InstanceProducer"/> based on the given <paramref name="serviceType"/> 
+        /// Creates a new <see cref="InstanceProducer"/> based on the given <paramref name="serviceType"/>
         /// and <paramref name="expression"/> where the <paramref name="expression"/> will be used as-is;
         /// no interception (using <see cref="Container.ExpressionBuilt">ExpressionBuilt</see>) such as
         /// decorators will be applied.
@@ -231,7 +244,8 @@ namespace SimpleInjector
         /// <param name="expression">The expression that describes the instance to be produced.</param>
         /// <param name="container">The <see cref="Container"/> instance for this registration.</param>
         /// <returns>A new <see cref="InstanceProducer"/> that describes the expression.</returns>
-        public static InstanceProducer FromExpression(Type serviceType, Expression expression, Container container)
+        public static InstanceProducer FromExpression(
+            Type serviceType, Expression expression, Container container)
         {
             Requires.IsNotNull(serviceType, nameof(serviceType));
             Requires.IsNotNull(expression, nameof(expression));
@@ -242,11 +256,15 @@ namespace SimpleInjector
 
         /// <summary>Produces an instance.</summary>
         /// <returns>An instance. Will never return null.</returns>
-        /// <exception cref="ActivationException">When the instance could not be retrieved or is null.</exception>
+        /// <exception cref="ActivationException">When the instance could not be retrieved or is null.
+        /// </exception>
         [SuppressMessage("Microsoft.Design", "CA1024:UsePropertiesWhereAppropriate", Justification =
             "A property is not appropriate, because get instance could possibly be a heavy operation.")]
         public object GetInstance()
         {
+            // We must lock the container, because not locking could lead to race conditions.
+            this.Container.LockContainer();
+
             this.CheckForCyclicDependencies();
 
             object instance;
@@ -273,7 +291,7 @@ namespace SimpleInjector
                 throw;
             }
 
-            if (instance == null)
+            if (instance is null)
             {
                 throw new ActivationException(StringResources.DelegateForTypeReturnedNull(this.ServiceType));
             }
@@ -282,12 +300,15 @@ namespace SimpleInjector
         }
 
         /// <summary>
-        /// Builds an expression that expresses the intent to get an instance by the current producer. A call 
+        /// Builds an expression that expresses the intent to get an instance by the current producer. A call
         /// to this method locks the container. New registrations can't be made after a call to this method.
         /// </summary>
         /// <returns>An Expression.</returns>
         public Expression BuildExpression()
         {
+            // We must lock the container, because not locking could lead to race conditions.
+            this.Container.LockContainer();
+
             this.CheckForCyclicDependencies();
 
             try
@@ -320,10 +341,10 @@ namespace SimpleInjector
             finally
             {
                 // NOTE:  We don't remove the cyclic dependency validator while building the expression.
-                // Instead we reset it so it can be checked later on again. We do this because only if 
-                // GetInstance has been called we can know for sure that there's no cyclic dependency. There 
-                // could be a 'runtime cyclic dependency' caused by a registered delegate that calls back into 
-                // the container manually. This will not be detected during building the expression, because 
+                // Instead we reset it so it can be checked later on again. We do this because only if
+                // GetInstance has been called we can know for sure that there's no cyclic dependency. There
+                // could be a 'runtime cyclic dependency' caused by a registered delegate that calls back into
+                // the container manually. This will not be detected during building the expression, because
                 // the delegate won't (always) get executed at this point.
                 this.ResetCyclicDependencyValidator();
             }
@@ -331,14 +352,14 @@ namespace SimpleInjector
 
         /// <summary>
         /// Gets the collection of relationships for this instance that the container knows about.
-        /// This includes relationships between the registered type and its dependencies and relationships 
-        /// between applied decorators and their dependencies. Note that types that are not newed up by the 
+        /// This includes relationships between the registered type and its dependencies and relationships
+        /// between applied decorators and their dependencies. Note that types that are not newed up by the
         /// container and properties that are injected inside a custom delegate that is registered using the
-        /// <see cref="SimpleInjector.Container.RegisterInitializer{TService}">RegisterInitializer</see> 
+        /// <see cref="Container.RegisterInitializer{TService}">RegisterInitializer</see>
         /// method are unknown to the container and are not returned from this method.
         /// Also note that this method will return an empty collection when called before the
-        /// registered type is requested from the container (or before 
-        /// <see cref="SimpleInjector.Container.Verify()">Verify</see> is called). 
+        /// registered type is requested from the container (or before
+        /// <see cref="Container.Verify()">Verify</see> is called).
         /// </summary>
         /// <returns>An array of <see cref="KnownRelationship"/> instances.</returns>
         public KnownRelationship[] GetRelationships()
@@ -356,21 +377,39 @@ namespace SimpleInjector
         /// graph.
         /// </summary>
         /// <returns>A string representation of the object graph.</returns>
-        /// <exception cref="InvalidOperationException">Thrown when this method is called before 
+        /// <exception cref="InvalidOperationException">Thrown when this method is called before
         /// <see cref="GetInstance"/> or <see cref="BuildExpression"/> have been called. These calls can be
         /// done directly and explicitly by the user on this instance, indirectly by calling
         /// <see cref="GetInstance"/> or <see cref="BuildExpression"/> on an instance that depends on this
-        /// instance, or by calling <see cref="SimpleInjector.Container.Verify()">Verify</see> on the container.
+        /// instance, or by calling <see cref="Container.Verify()">Verify</see> on the container.
         /// </exception>
-        public string VisualizeObjectGraph()
+        public string VisualizeObjectGraph() => this.VisualizeObjectGraph(new VisualizationOptions());
+
+        /// <summary>
+        /// Builds a string representation of the object graph with the current instance as root of the
+        /// graph.
+        /// </summary>
+        /// <param name="options">The various visualization options for building a string representation of
+        /// the object graph.</param>
+        /// <returns>A string representation of the object graph.</returns>
+        /// <exception cref="InvalidOperationException">Thrown when this method is called before
+        /// <see cref="GetInstance"/> or <see cref="BuildExpression"/> have been called. These calls can be
+        /// done directly and explicitly by the user on this instance, indirectly by calling
+        /// <see cref="GetInstance"/> or <see cref="BuildExpression"/> on an instance that depends on this
+        /// instance, or by calling <see cref="Container.Verify()">Verify</see> on the container.
+        /// </exception>
+        /// <exception cref="NullReferenceException">Thrown when options is null.</exception>
+        public string VisualizeObjectGraph(VisualizationOptions options)
         {
+            Requires.IsNotNull(options, nameof(options));
+
             if (!this.IsExpressionCreated)
             {
                 throw new InvalidOperationException(
                     StringResources.VisualizeObjectGraphShouldBeCalledAfterTheExpressionIsCreated());
             }
 
-            return InstanceProducerVisualizer.VisualizeIndentedObjectGraph(this);
+            return InstanceProducerVisualizer.VisualizeIndentedObjectGraph(this, options);
         }
 
         // Throws an InvalidOperationException on failure.
@@ -382,8 +421,9 @@ namespace SimpleInjector
             }
             catch (Exception ex)
             {
-                throw new InvalidOperationException(StringResources.ConfigurationInvalidCreatingInstanceFailed(
-                    this.ServiceType, ex), ex);
+                throw new InvalidOperationException(
+                    StringResources.ConfigurationInvalidCreatingInstanceFailed(this.ServiceType, ex),
+                    ex);
             }
         }
 
@@ -399,26 +439,23 @@ namespace SimpleInjector
             }
             catch (Exception ex)
             {
-                throw new InvalidOperationException(StringResources.ConfigurationInvalidCreatingInstanceFailed(
-                    this.Registration.ImplementationType, ex), ex);
+                throw new InvalidOperationException(
+                    StringResources.ConfigurationInvalidCreatingInstanceFailed(
+                        this.Registration.ImplementationType, ex),
+                    ex);
             }
 
             return instance;
         }
 
         // A verifier is an Action delegate that will be called during the object creation step in the
-        // verification process (when the user calls Verify()) to enable verification of the whole object 
+        // verification process (when the user calls Verify()) to enable verification of the whole object
         // graph.
         internal void AddVerifier(Action<Scope> action)
         {
             lock (this.locker)
             {
-                if (this.verifiers == null)
-                {
-                    this.verifiers = new List<Action<Scope>>();
-                }
-
-                this.verifiers.Add(action);
+                (this.verifiers ??= new List<Action<Scope>>()).Add(action);
             }
         }
 
@@ -426,24 +463,17 @@ namespace SimpleInjector
         {
             lock (this.locker)
             {
-                if (this.wrappedProducers == null)
-                {
-                    this.wrappedProducers = new List<InstanceProducer>();
-                }
-
-                this.wrappedProducers.Add(currentProducer);
+                (this.wrappedProducers ??= new List<InstanceProducer>()).Add(currentProducer);
             }
         }
 
         internal void ReplaceRelationships(IEnumerable<KnownRelationship> relationships)
         {
-            this.knownRelationships = new ReadOnlyCollection<KnownRelationship>(relationships.Distinct().ToArray());
+            this.knownRelationships =
+                new ReadOnlyCollection<KnownRelationship>(relationships.Distinct().ToArray());
         }
 
-        internal void EnsureTypeWillBeExplicitlyVerified()
-        {
-            this.isValid = null;
-        }
+        internal void EnsureTypeWillBeExplicitlyVerified() => this.isValid = null;
 
         internal void DoExtraVerfication(Scope scope)
         {
@@ -458,8 +488,9 @@ namespace SimpleInjector
             }
             catch (Exception ex)
             {
-                throw new InvalidOperationException(StringResources.ConfigurationInvalidCreatingInstanceFailed(
-                    this.ServiceType, ex), ex);
+                throw new InvalidOperationException(
+                    StringResources.ConfigurationInvalidCreatingInstanceFailed(this.ServiceType, ex),
+                    ex);
             }
         }
 
@@ -500,7 +531,7 @@ namespace SimpleInjector
         {
             if (!this.Container.Options.SuppressLifestyleMismatchVerification)
             {
-                var error = LifestyleMismatchAnalyzer.Instance.Analyze(this.SelfAndWrappedProducers)
+                var error = new LifestyleMismatchAnalyzer().Analyze(this.SelfAndWrappedProducers)
                     .Cast<LifestyleMismatchDiagnosticResult>()
                     .FirstOrDefault();
 
@@ -514,43 +545,46 @@ namespace SimpleInjector
 
         private Expression BuildExpressionInternal()
         {
-            // We must lock the container, because not locking could lead to race conditions.
-            this.Container.LockContainer();
-
             var expression = this.Registration.BuildExpression();
 
-            if (expression == null)
+            if (expression is null)
             {
                 throw new ActivationException(StringResources.RegistrationReturnedNullFromBuildExpression(
                     this.Registration));
             }
 
-            var e = new ExpressionBuiltEventArgs(this.ServiceType, expression);
+            ExpressionBuiltEventArgs? e = this.Container.OnExpressionBuilt(this, expression);
 
-            e.Lifestyle = this.Lifestyle;
-            e.InstanceProducer = this;
-            e.ReplacedRegistration = this.Registration;
-
-            this.Container.OnExpressionBuilt(e, this);
-
-            if (!object.ReferenceEquals(this.Registration, e.ReplacedRegistration))
+            if (e != null)
             {
-                this.Registration = e.ReplacedRegistration;
+                if (!object.ReferenceEquals(this.Registration, e.ReplacedRegistration))
+                {
+                    this.Registration = e.ReplacedRegistration;
+                }
+                else
+                {
+                    this.overriddenLifestyle = e.Lifestyle;
+                }
+
+                this.Analyze();
+
+                return e.Expression;
             }
             else
             {
-                this.overriddenLifestyle = e.Lifestyle;
+                this.overriddenLifestyle = this.Lifestyle;
+
+                this.Analyze();
+
+                return expression;
             }
-
-            this.Analyze();
-
-            return e.Expression;
         }
 
         private bool MustWrapThrownException(Exception ex)
         {
-            return this.IsContainerAutoRegistered || this.Registration.WrapsInstanceCreationDelegate ||
-                !(ex is ActivationException);
+            return this.IsContainerAutoRegistered
+                || this.Registration.WrapsInstanceCreationDelegate
+                || !(ex is ActivationException);
         }
 
         private string BuildActivationExceptionMessage(Exception innerException)
@@ -583,21 +617,14 @@ namespace SimpleInjector
 
         // Prevents any recursive calls from taking place.
         // This method will be inlined by the JIT.
-#if !NET40
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-#endif
         private void CheckForCyclicDependencies()
         {
-            if (this.validator != null)
-            {
-                this.validator.Check();
-            }
+            this.validator?.Check();
         }
 
         // This method will be inlined by the JIT.
-#if !NET40
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-#endif
         private void RemoveCyclicDependencyValidator()
         {
             // No recursive calls detected, we can remove the validator to increase performance.
@@ -615,18 +642,13 @@ namespace SimpleInjector
         // exception, because a new call to that provider would otherwise make the validator think it is a
         // recursive call and throw an exception, and this would hide the exception that would otherwise be
         // thrown by the provider itself.
-#if !NET40
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-#endif
         private void ResetCyclicDependencyValidator()
         {
-            if (this.validator != null)
-            {
-                this.validator.Reset();
-            }
+            this.validator?.Reset();
         }
 
-        private Exception GetExceptionIfInvalid()
+        private Exception? GetExceptionIfInvalid()
         {
             try
             {
@@ -648,7 +670,7 @@ namespace SimpleInjector
             // in the registrations dictionary anyway, or it is used to build up an InstanceProducer (by
             // the decorator sub system) that is only used for diagnostics. Allowing the latter producers to
             // be added, will clutter the diagnostic API and will cause the Verify() method to verify those
-            // producers needlessly.   
+            // producers needlessly.
             return !(registration is ExpressionRegistration);
         }
 
@@ -668,7 +690,7 @@ namespace SimpleInjector
             public Type ServiceType => this.producer.ServiceType;
 
             [DebuggerDisplay("{" + TypesExtensions.FriendlyName + "(" + nameof(ImplementationType) + "), nq}")]
-            public Type ImplementationType => this.producer.ImplementationType;
+            public Type ImplementationType => this.producer.FinalImplementationType;
 
             public KnownRelationship[] Relationships => this.producer.GetRelationships();
 
@@ -676,7 +698,7 @@ namespace SimpleInjector
             // graph to be shown in compact form in the debugger in-line value field, but still allow the
             // complete formatted object graph to be shown when the user opens the text visualizer.
             [DebuggerDisplay(value: "{" + nameof(TruncatedDependencyGraph) + ", nq}")]
-            public string DependencyGraph => this.producer.VisualizeIndentedObjectGraph();
+            public string DependencyGraph => this.producer.VisualizeIndentedObjectGraph(new VisualizationOptions());
 
             [DebuggerHidden]
             private string TruncatedDependencyGraph => this.producer.VisualizeInlinedAndTruncatedObjectGraph(160);

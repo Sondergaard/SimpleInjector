@@ -1,58 +1,63 @@
-﻿#region Copyright Simple Injector Contributors
-/* The Simple Injector is an easy-to-use Inversion of Control library for .NET
- * 
- * Copyright (c) 2014 Simple Injector Contributors
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and 
- * associated documentation files (the "Software"), to deal in the Software without restriction, including 
- * without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell 
- * copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the 
- * following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in all copies or substantial 
- * portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT 
- * LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO 
- * EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER 
- * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE 
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
-*/
-#endregion
+﻿// Copyright (c) Simple Injector Contributors. All rights reserved.
+// Licensed under the MIT License. See LICENSE file in the project root for license information.
 
 namespace SimpleInjector.Internals
 {
     using System;
-    
+    using System.Diagnostics;
+
     /// <summary>
     /// Container controlled collections can be supplied with both Type objects or direct Registration
     /// instances.
     /// </summary>
+    [DebuggerDisplay(nameof(ContainerControlledItem) + " ({" + nameof(DebuggerDisplay) + ", nq})")]
     internal sealed class ContainerControlledItem
     {
-        /// <summary>Will never be null. Can be open-generic.</summary>
         public readonly Type ImplementationType;
 
-        /// <summary>Can be null.</summary>
-        public readonly Registration Registration;
+        public readonly Registration? Registration;
 
         private ContainerControlledItem(Registration registration)
         {
             Requires.IsNotNull(registration, nameof(registration));
+
             this.Registration = registration;
             this.ImplementationType = registration.ImplementationType;
+            this.RegisteredImplementationType = registration.ImplementationType;
         }
 
-        private ContainerControlledItem(Type implementationType)
+        private ContainerControlledItem(Type implementationType, Lifestyle? lifestyle)
         {
             Requires.IsNotNull(implementationType, nameof(implementationType));
+
             this.ImplementationType = implementationType;
+            this.Lifestyle = lifestyle;
+            this.RegisteredImplementationType = implementationType;
         }
 
-        public static ContainerControlledItem CreateFromRegistration(Registration registration) => 
+        public Lifestyle? Lifestyle { get; }
+        internal Type RegisteredImplementationType { get; set; }
+
+        internal string DebuggerDisplay =>
+            $"ImplementationType: {this.ImplementationType.ToFriendlyName()}, " + (
+            this.Registration != null
+                ? $"Registration.ImplementationType: {this.Registration.ImplementationType.ToFriendlyName()}"
+                : "Registration: <null>");
+
+        public static ContainerControlledItem CreateFromRegistration(Registration registration) =>
             new ContainerControlledItem(registration);
 
-        public static ContainerControlledItem CreateFromType(Type implementationType) => 
-            new ContainerControlledItem(implementationType);
+        public static ContainerControlledItem CreateFromType(Type implementationType) =>
+            new ContainerControlledItem(implementationType, null);
+
+        public static ContainerControlledItem CreateFromType(Type implementationType, Lifestyle? lifestyle) =>
+            new ContainerControlledItem(implementationType, lifestyle);
+
+        public static ContainerControlledItem CreateFromType(
+            Type registeredImplementationType, Type closedImplementationType, Lifestyle? lifestyle) =>
+            new ContainerControlledItem(closedImplementationType, lifestyle)
+            {
+                RegisteredImplementationType = registeredImplementationType
+            };
     }
 }

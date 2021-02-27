@@ -85,7 +85,7 @@
     {
     }
 
-    public class Duplicate<T> : IDuplicate<T>
+    public class Duplicate<T> : IDuplicate<T>, IDuplicate
     {
     }
 
@@ -95,6 +95,11 @@
     }
 
     public class FakeTimeProvider : ITimeProvider
+    {
+        public DateTime Now { get; set; }
+    }
+
+    public class PluginTimeProvider : ITimeProvider, IPlugin
     {
         public DateTime Now { get; set; }
     }

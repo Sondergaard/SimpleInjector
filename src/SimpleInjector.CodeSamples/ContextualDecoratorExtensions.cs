@@ -4,6 +4,7 @@
     using System.Collections.Generic;
     using System.Linq;
     using System.Linq.Expressions;
+    using SimpleInjector;
     using SimpleInjector.Advanced;
 
     public static class ContextualDecoratorExtensions
@@ -12,23 +13,26 @@
 
         public static void EnableContextualDecoratorSupport(this ContainerOptions options)
         {
-            if (GetContextualPredicates(options.Container) == null)
+            if (GetContextualPredicates(options.Container) is null)
             {
                 var predicates = new ContextualPredicateCollection();
 
                 options.DependencyInjectionBehavior =
                     new ContextualDecoratorInjectionBehavior(options.Container, predicates);
 
-                options.Container.SetItem(PredicateCollectionKey, predicates);
+                options.Container.ContainerScope.SetItem(PredicateCollectionKey, predicates);
             }
         }
 
-        public static void RegisterContextualDecorator(this Container container, Type serviceType,
-            Type decoratorType, Predicate<InjectionTargetInfo> contextualPredicate)
+        public static void RegisterContextualDecorator(
+            this Container container,
+            Type serviceType,
+            Type decoratorType,
+            Predicate<InjectionTargetInfo> contextualPredicate)
         {
             var predicates = GetContextualPredicates(container);
 
-            if (predicates == null)
+            if (predicates is null)
             {
                 throw new InvalidOperationException(
                     "Please call container.Options.EnableContextualDecoratorSupport() first.");
@@ -40,7 +44,7 @@
                     "Conditional decorator " + decoratorType.ToFriendlyName() + " hasn't been applied to " +
                     "type " + c.ServiceType.ToFriendlyName() + ". Make sure that all registered " +
                     "decorators that wrap this decorator are transient and don't depend on " +
-                    "Func<" + c.ServiceType.ToFriendlyName() + "> and that " + 
+                    "Func<" + c.ServiceType.ToFriendlyName() + "> and that " +
                     c.ServiceType.ToFriendlyName() + " is not resolved as root type.");
             };
 
@@ -52,7 +56,7 @@
 
         private static ContextualPredicateCollection GetContextualPredicates(Container container)
         {
-            return (ContextualPredicateCollection)container.GetItem(PredicateCollectionKey);
+            return (ContextualPredicateCollection)container.ContainerScope.GetItem(PredicateCollectionKey);
         }
 
         private sealed class ContextualDecoratorInjectionBehavior : IDependencyInjectionBehavior
@@ -69,20 +73,18 @@
                 this.defaultBehavior = container.Options.DependencyInjectionBehavior;
             }
 
-            public void Verify(InjectionConsumerInfo consumer)
-            {
-                this.defaultBehavior.Verify(consumer);
-            }
+            public bool VerifyDependency(InjectionConsumerInfo dependency, out string errorMessage) =>
+                this.defaultBehavior.VerifyDependency(dependency, out errorMessage);
 
-            public InstanceProducer GetInstanceProducer(InjectionConsumerInfo consumer, bool throwOnFailure)
+            public InstanceProducer GetInstanceProducer(InjectionConsumerInfo dependency, bool throwOnFailure)
             {
-                InstanceProducer producer = this.defaultBehavior.GetInstanceProducer(consumer, throwOnFailure);
+                InstanceProducer producer = this.defaultBehavior.GetInstanceProducer(dependency, throwOnFailure);
 
                 List<PredicatePair> pairs;
 
-                if (this.MustApplyContextualDecorator(consumer.Target.TargetType, out pairs))
+                if (this.MustApplyContextualDecorator(dependency.Target.TargetType, out pairs))
                 {
-                    return this.ApplyDecorator(consumer.Target, producer.BuildExpression(), pairs);
+                    return this.ApplyDecorator(dependency.Target, producer.BuildExpression(), pairs);
                 }
 
                 return producer;

@@ -1,31 +1,11 @@
-﻿#region Copyright Simple Injector Contributors
-/* The Simple Injector is an easy-to-use Inversion of Control library for .NET
- * 
- * Copyright (c) 2013-2018 Simple Injector Contributors
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and 
- * associated documentation files (the "Software"), to deal in the Software without restriction, including 
- * without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell 
- * copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the 
- * following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in all copies or substantial 
- * portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT 
- * LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO 
- * EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER 
- * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE 
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
-*/
-#endregion
+﻿// Copyright (c) Simple Injector Contributors. All rights reserved.
+// Licensed under the MIT License. See LICENSE file in the project root for license information.
 
 namespace SimpleInjector.Internals
 {
     using System;
     using System.Collections.Generic;
     using System.Diagnostics;
-    using System.Globalization;
     using System.Linq;
 
     /// <summary>
@@ -43,7 +23,7 @@ namespace SimpleInjector.Internals
 
         [DebuggerDisplay("{(" + nameof(partialOpenGenericImplementation) + " == null ? \"null\" : " +
             TypesExtensions.FriendlyName + "(" + nameof(partialOpenGenericImplementation) + ")),nq}")]
-        private readonly Type partialOpenGenericImplementation;
+        private readonly Type? partialOpenGenericImplementation;
 
         private readonly bool isPartialOpenGenericImplementation;
 
@@ -52,22 +32,23 @@ namespace SimpleInjector.Internals
             this.closedServiceType = closedServiceType;
             this.implementation = implementation;
 
-            if (implementation.IsGenericType() && !implementation.IsGenericTypeDefinition())
+            this.isPartialOpenGenericImplementation =
+                implementation.IsGenericType() && !implementation.IsGenericTypeDefinition();
+
+            if (this.isPartialOpenGenericImplementation)
             {
                 this.openGenericImplementation = implementation.GetGenericTypeDefinition();
                 this.partialOpenGenericImplementation = implementation;
-                this.isPartialOpenGenericImplementation = true;
             }
             else
             {
                 this.openGenericImplementation = implementation;
                 this.partialOpenGenericImplementation = null;
-                this.isPartialOpenGenericImplementation = false;
             }
         }
 
-        internal static bool IsImplementationApplicableToEveryGenericType(Type openAbstraction,
-            Type openImplementation)
+        internal static bool IsImplementationApplicableToEveryGenericType(
+            Type openAbstraction, Type openImplementation)
         {
             try
             {
@@ -82,7 +63,7 @@ namespace SimpleInjector.Internals
             }
         }
 
-        internal static Type MakeClosedImplementation(Type closedAbstraction, Type openImplementation)
+        internal static Type? MakeClosedImplementation(Type closedAbstraction, Type openImplementation)
         {
             var builder = new GenericTypeBuilder(closedAbstraction, openImplementation);
             var results = builder.BuildClosedGenericImplementation();
@@ -93,12 +74,7 @@ namespace SimpleInjector.Internals
         {
             var openGenericBaseType = this.closedServiceType.GetGenericTypeDefinition();
 
-            var openGenericBaseTypes = (
-                from baseType in this.openGenericImplementation.GetTypeBaseTypesAndInterfaces()
-                where openGenericBaseType.IsGenericTypeDefinitionOf(baseType)
-                select baseType)
-                .Distinct()
-                .ToArray();
+            var openGenericBaseTypes = this.GetOpenGenericBaseTypes(openGenericBaseType);
 
             return openGenericBaseTypes.Any(type =>
             {
@@ -113,12 +89,19 @@ namespace SimpleInjector.Internals
             });
         }
 
+        private Type[] GetOpenGenericBaseTypes(Type openGenericBaseType) => (
+            from baseType in this.openGenericImplementation.GetTypeBaseTypesAndInterfaces()
+            where openGenericBaseType.IsGenericTypeDefinitionOf(baseType)
+            select baseType)
+            .Distinct()
+            .ToArray();
+
         internal BuildResult BuildClosedGenericImplementation()
         {
             bool isClosedImplementation = !this.implementation.ContainsGenericParameters();
 
-            // In case the given implementation is already closed (or non-generic), we don't have to build a type.
-            // If the implementation matches, we can directly return it. This is much faster and simpler.
+            // In case the given implementation is already closed (or non-generic), we don't have to build a
+            // type. If the implementation matches, we can directly return it. This is much faster and simpler.
             if (isClosedImplementation)
             {
                 return this.closedServiceType.IsAssignableFrom(this.implementation)
@@ -131,12 +114,12 @@ namespace SimpleInjector.Internals
 
                 if (serviceType != null && this.SafisfiesPartialTypeArguments(serviceType))
                 {
-                    Type closedGenericImplementation =
+                    Type? closedGenericImplementation =
                         this.BuildClosedGenericImplementationBasedOnMatchingServiceType(serviceType);
 
                     // closedGenericImplementation will be null when there was a mismatch on type constraints.
-                    if (closedGenericImplementation != null &&
-                        this.closedServiceType.IsAssignableFrom(closedGenericImplementation))
+                    if (closedGenericImplementation != null
+                        && this.closedServiceType.IsAssignableFrom(closedGenericImplementation))
                     {
                         return BuildResult.Valid(closedGenericImplementation);
                     }
@@ -149,7 +132,7 @@ namespace SimpleInjector.Internals
         private CandicateServiceType FindMatchingOpenGenericServiceType()
         {
             // There can be more than one service that exactly matches, but they will never have a different
-            // set of generic type arguments; the type system ensures this. 
+            // set of generic type arguments; the type system ensures this.
             return (
                 from openCandidateServiceType in this.GetOpenCandidateServiceTypes()
                 where this.MatchesClosedGenericBaseType(openCandidateServiceType)
@@ -157,7 +140,7 @@ namespace SimpleInjector.Internals
                 .FirstOrDefault();
         }
 
-        private Type BuildClosedGenericImplementationBasedOnMatchingServiceType(
+        private Type? BuildClosedGenericImplementationBasedOnMatchingServiceType(
             CandicateServiceType candicateServiceType)
         {
             if (this.openGenericImplementation.IsGenericType())
@@ -190,12 +173,10 @@ namespace SimpleInjector.Internals
                 .Distinct()
                 .ToArray();
 
-            var candidates = (
+            return (
                 from type in openGenericBaseTypes
                 select this.ToCandicateServiceType(type))
                 .ToArray();
-
-            return candidates;
         }
 
         private CandicateServiceType ToCandicateServiceType(Type openCandidateServiceType)
@@ -225,9 +206,9 @@ namespace SimpleInjector.Internals
 
         private bool SatisfiesGenericTypeConstraints(CandicateServiceType openCandidateServiceType)
         {
-            // Type arguments that don't match are left out of the list. 
-            // When the length of the result does not match the actual length, this means that the generic 
-            // type constraints don't match and the given service type does not satisfy the generic type 
+            // Type arguments that don't match are left out of the list.
+            // When the length of the result does not match the actual length, this means that the generic
+            // type constraints don't match and the given service type does not satisfy the generic type
             // constraints.
             return openCandidateServiceType.Arguments.Length ==
                 this.openGenericImplementation.GetGenericArguments().Length;
@@ -247,7 +228,7 @@ namespace SimpleInjector.Internals
         {
             // Map the partial open generic type arguments to the concrete arguments.
             var mappings =
-                this.partialOpenGenericImplementation.GetGenericArguments()
+                this.partialOpenGenericImplementation!.GetGenericArguments()
                 .Zip(arguments, ArgumentMapping.Create);
 
             return mappings.All(mapping => mapping.ConcreteTypeMatchesPartialArgument());
@@ -255,8 +236,11 @@ namespace SimpleInjector.Internals
 
         private Type[] GetMatchingGenericArgumentsForOpenImplementationBasedOn(Type openCandidateServiceType)
         {
-            var finder = new GenericArgumentFinder(openCandidateServiceType, this.closedServiceType,
-                this.openGenericImplementation, this.partialOpenGenericImplementation);
+            var finder = new GenericArgumentFinder(
+                openCandidateServiceType,
+                this.closedServiceType,
+                this.openGenericImplementation,
+                this.partialOpenGenericImplementation);
 
             return finder.GetConcreteTypeArgumentsForClosedImplementation();
         }
@@ -268,7 +252,8 @@ namespace SimpleInjector.Internals
             .Distinct()
             .ToArray();
 
-        private static IEnumerable<Type> GetNestedTypeArgumentsForTypeArgument(Type argument, IList<Type> processedArguments)
+        private static IEnumerable<Type> GetNestedTypeArgumentsForTypeArgument(
+            Type argument, IList<Type> processedArguments)
         {
             processedArguments.Add(argument);
 
@@ -296,24 +281,21 @@ namespace SimpleInjector.Internals
         /// <summary>Result of the GenericTypeBuilder.</summary>
         internal sealed class BuildResult
         {
-            private BuildResult()
+            internal static readonly BuildResult Invalid = new BuildResult(null);
+
+            private BuildResult(Type? closedGenericImplementation)
             {
+                this.ClosedGenericImplementation = closedGenericImplementation;
             }
 
-            internal bool ClosedServiceTypeSatisfiesAllTypeConstraints { get; private set; }
+            internal bool ClosedServiceTypeSatisfiesAllTypeConstraints =>
+                this.ClosedGenericImplementation != null;
 
-            internal Type ClosedGenericImplementation { get; private set; }
-
-            internal static readonly BuildResult Invalid =
-                new BuildResult { ClosedServiceTypeSatisfiesAllTypeConstraints = false };
+            internal Type? ClosedGenericImplementation { get; }
 
             internal static BuildResult Valid(Type closedGenericImplementation)
             {
-                return new BuildResult
-                {
-                    ClosedServiceTypeSatisfiesAllTypeConstraints = true,
-                    ClosedGenericImplementation = closedGenericImplementation,
-                };
+                return new BuildResult(closedGenericImplementation);
             }
         }
 
@@ -332,14 +314,14 @@ namespace SimpleInjector.Internals
             }
 
 #if DEBUG
-            public override string ToString()
-            {
-                // This is for our own debugging purposes. We don't use the DebuggerDisplayAttribute, since
-                // this code is hard to write (and maintain) as debugger display string.
-                return string.Format(CultureInfo.InvariantCulture, "ServiceType: {0}, Arguments: {1}",
+            // This is for our own debugging purposes. We don't use the DebuggerDisplayAttribute, because
+            // this code is hard to write (and maintain) as debugger display string.
+            public override string ToString() =>
+                string.Format(
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    "ServiceType: {0}, Arguments: {1}",
                     this.ServiceType.ToFriendlyName(),
                     this.Arguments.Select(type => type.ToFriendlyName()).ToCommaSeparatedText());
-            }
 #endif
         }
     }
